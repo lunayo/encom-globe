@@ -146,48 +146,6 @@ function start() {
   }
 }
 
-// function openOptions(){
-//     var headerTopPosition = $("#header-top").position().top;
-//     var headerBottomPosition = $("#header-bottom").position().top;
-//     var headerHeight = $("#header-top").outerHeight(); /* margins or something, whatever */
-//     $(".header-animator").offset({top: $(document).height()/2, left: 25});
-//     $(".header-animator").height(0);
-
-//     // $("#options").data("left", $("#options").css("left"));
-//     // $("#thumbprint").data("left", $("#thumbprint").css("left"));
-//     // $("#options").animate({left: 0}, 500);
-//     // $("#thumbprint").animate({left: 265}, 500);
-
-//     // $("#options-content").delay(1500).animate({opacity: 1}, 500);
-
-//     setTimeout(function(){
-//         $(".header-animator").css("visibility", "visible");
-
-//         $("#header-animator-outside").animate({
-//             top: headerTopPosition,
-//             height: headerBottomPosition - headerTopPosition + headerHeight
-//             }, 500);
-
-//         $("#header-animator-inside").animate({
-//             top: headerTopPosition + headerHeight,
-//             height: headerBottomPosition - headerTopPosition - headerHeight
-//             }, 500);
-//     }, 500);
-
-//     setTimeout(function(){
-//         $(".header-animator").css("visibility", "hidden");
-//         $(".header").css("visibility", "visible");
-//     }, 1000);
-
-// }
-
-// function closeOptions(){
-//     $("#options").animate({left: $("#options").data("left")}, 500);
-//     $("#thumbprint").animate({left: $("#thumbprint").data("left")}, 500);
-//     $("#options-content").animate({opacity: 0}, 500);
-//     $(".header").css("visibility", "hidden");
-// }
-
 $(function () {
   var open = false;
 
@@ -314,39 +272,7 @@ $(function () {
     },
     active: function () {
       /* don't start the globe until the font has been loaded */
-      $("#options")
-        .css({
-          visibility: "visible",
-          top: docHeight / 2,
-          bottom: docHeight / 2,
-        })
-        .animate(
-          {
-            top: 0,
-            bottom: 0,
-            "padding-top": 46,
-          },
-          800,
-          function complete() {
-            $("#thumbprint").animate({ opacity: 1 });
-            $("#thumbprint").click(function () {
-              if (!open) {
-                open = true;
-                // openOptions();
-              } else {
-                open = false;
-                // closeOptions();
-              }
-            });
-
-            setTimeout(function () {
-              open = true;
-              // openOptions();
-            }, 3000);
-
-            createGlobe();
-          }
-        );
+      createGlobe();
     },
   };
 
