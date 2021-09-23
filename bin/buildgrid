@@ -95,8 +95,7 @@ fs.createReadStream(map)
 
     if (argv.o) {
       var fs = require("fs");
-
-      fs.writeFile(argv.o, output);
+      fs.writeFileSync(argv.o, output);
     } else {
       console.log(output);
     }
