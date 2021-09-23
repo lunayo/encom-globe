@@ -10,6 +10,7 @@
   "author": "robscanlon@gmail.com",
   "main": "src/Globe.js",
   "scripts": {
+    "buildgrid": "bin/buildgrid -r 500 -o grid.js -m resources/equirectangle_projection.png",
     "build": "grunt build",
     "lint": "prettier --write src '*.js' '*.json'",
     "sort": "sort-package-json"
