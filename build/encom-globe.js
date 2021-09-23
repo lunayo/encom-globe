@@ -1,7 +1,6 @@
 (function e(t,n,r){function s(o,u){if(!n[o]){if(!t[o]){var a=typeof require=="function"&&require;if(!u&&a)return a(o,!0);if(i)return i(o,!0);throw new Error("Cannot find module '"+o+"'")}var f=n[o]={exports:{}};t[o][0].call(f.exports,function(e){var n=t[o][1][e];return s(n?n:e)},f,f.exports,e,t,n,r)}return n[o].exports}var i=typeof require=="function"&&require;for(var o=0;o<r.length;o++)s(r[o]);return s})({1:[function(require,module,exports){
-window.ENCOM = (window.ENCOM || {});
-window.ENCOM.Globe = require('./src/Globe.js');
-
+window.ENCOM = window.ENCOM || {};
+window.ENCOM.Globe = require("./src/Globe.js");
 
 },{"./src/Globe.js":15}],2:[function(require,module,exports){
 var Point = require('./point');
@@ -44267,1310 +44266,1544 @@ module.exports=TWEEN;
 })();
 
 },{}],15:[function(require,module,exports){
-var TWEEN = require('tween.js'),
-    THREE = require('three'),
-    Hexasphere = require('hexasphere.js'),
-    Quadtree2 = require('quadtree2'),
-    Vec2 = require('vec2'),
-    Pin = require('./Pin'),
-    Marker = require('./Marker'),
-    Satellite = require('./Satellite'),
-    SmokeProvider = require('./SmokeProvider'),
-    pusherColor = require('pusher.color'),
-    utils = require('./utils');
+var TWEEN = require("tween.js"),
+  THREE = require("three"),
+  Hexasphere = require("hexasphere.js"),
+  Quadtree2 = require("quadtree2"),
+  Vec2 = require("vec2"),
+  Pin = require("./Pin"),
+  Marker = require("./Marker"),
+  Satellite = require("./Satellite"),
+  SmokeProvider = require("./SmokeProvider"),
+  pusherColor = require("pusher.color"),
+  utils = require("./utils");
 
-var latLonToXYZ = function(width, height, lat,lon){
+var latLonToXYZ = function (width, height, lat, lon) {
+  var x = Math.floor(width / 2.0 + (width / 360.0) * lon);
+  var y = Math.floor(height / 2.0 + (height / 180.0) * lat);
 
-    var x = Math.floor(width/2.0 + (width/360.0)*lon);
-    var y = Math.floor((height/2.0 + (height/180.0)*lat));
-
-    return {x: x, y:y};
+  return { x: x, y: y };
 };
 
-var latLon2d = function(lat,lon){
-
-    var rad = 2 + (Math.abs(lat)/90) * 15;
-    return {x: lat+90, y:lon + 180, rad: rad};
+var latLon2d = function (lat, lon) {
+  var rad = 2 + (Math.abs(lat) / 90) * 15;
+  return { x: lat + 90, y: lon + 180, rad: rad };
 };
 
+var addInitialData = function () {
+  if (this.data.length == 0) {
+    return;
+  }
+  while (
+    this.data.length > 0 &&
+    this.firstRunTime + (next = this.data.pop()).when < Date.now()
+  ) {
+    this.addPin(next.lat, next.lng, next.label);
+  }
 
-
-var addInitialData = function(){
-    if(this.data.length == 0){
-        return;
-    }
-    while(this.data.length > 0 && this.firstRunTime + (next = this.data.pop()).when < Date.now()){
-        this.addPin(next.lat, next.lng, next.label);
-    }
-
-    if(this.firstRunTime + next.when >= Date.now()){
-        this.data.push(next);
-    }
+  if (this.firstRunTime + next.when >= Date.now()) {
+    this.data.push(next);
+  }
 };
 
+var createParticles = function () {
+  if (this.hexGrid) {
+    this.scene.remove(this.hexGrid);
+  }
 
-var createParticles = function(){
+  var pointVertexShader = [
+    "#define PI 3.141592653589793238462643",
+    "#define DISTANCE 500.0",
+    "#define INTRODURATION " + (parseFloat(this.introLinesDuration) + 0.00001),
+    "#define INTROALTITUDE " + (parseFloat(this.introLinesAltitude) + 0.00001),
+    "attribute float lng;",
+    "uniform float currentTime;",
+    "varying vec4 vColor;",
+    "",
+    "void main()",
+    "{",
+    "   vec3 newPos = position;",
+    "   float opacityVal = 0.0;",
+    "   float introStart = INTRODURATION * ((180.0 + lng)/360.0);",
+    "   if(currentTime > introStart){",
+    "      opacityVal = 1.0;",
+    "   }",
+    "   if(currentTime > introStart && currentTime < introStart + INTRODURATION / 8.0){",
+    "      newPos = position * INTROALTITUDE;",
+    "      opacityVal = .3;",
+    "   }",
+    "   if(currentTime > introStart + INTRODURATION / 8.0 && currentTime < introStart + INTRODURATION / 8.0 + 200.0){",
+    "      newPos = position * (1.0 + ((INTROALTITUDE-1.0) * (1.0-(currentTime - introStart-(INTRODURATION/8.0))/200.0)));",
+    "   }",
+    "   vColor = vec4( color, opacityVal );", //     set color associated to vertex; use later in fragment shader.
+    "   gl_Position = projectionMatrix * modelViewMatrix * vec4(newPos, 1.0);",
+    "}",
+  ].join("\n");
 
-    if(this.hexGrid){
-        this.scene.remove(this.hexGrid);
+  var pointFragmentShader = [
+    "varying vec4 vColor;",
+    "void main()",
+    "{",
+    "   gl_FragColor = vColor;",
+    "   float depth = gl_FragCoord.z / gl_FragCoord.w;",
+    "   float fogFactor = smoothstep(" +
+      parseInt(this.cameraDistance) +
+      ".0," +
+      parseInt(this.cameraDistance + 300) +
+      ".0, depth );",
+    "   vec3 fogColor = vec3(0.0);",
+    "   gl_FragColor = mix( vColor, vec4( fogColor, gl_FragColor.w ), fogFactor );",
+    "}",
+  ].join("\n");
+
+  var pointAttributes = {
+    lng: { type: "f", value: null },
+  };
+
+  this.pointUniforms = {
+    currentTime: { type: "f", value: 0.0 },
+  };
+
+  var pointMaterial = new THREE.ShaderMaterial({
+    uniforms: this.pointUniforms,
+    attributes: pointAttributes,
+    vertexShader: pointVertexShader,
+    fragmentShader: pointFragmentShader,
+    transparent: true,
+    vertexColors: THREE.VertexColors,
+    side: THREE.DoubleSide,
+  });
+
+  var triangles = this.tiles.length * 4;
+
+  var geometry = new THREE.BufferGeometry();
+
+  geometry.addAttribute("index", Uint16Array, triangles * 3, 1);
+  geometry.addAttribute("position", Float32Array, triangles * 3, 3);
+  geometry.addAttribute("normal", Float32Array, triangles * 3, 3);
+  geometry.addAttribute("color", Float32Array, triangles * 3, 3);
+  geometry.addAttribute("lng", Float32Array, triangles * 3, 1);
+
+  var lng_values = geometry.attributes.lng.array;
+
+  var baseColorSet = pusherColor(this.baseColor).hueSet();
+  var myColors = [];
+  for (var i = 0; i < baseColorSet.length; i++) {
+    myColors.push(baseColorSet[i].shade(Math.random() / 3.0));
+  }
+
+  // break geometry into
+  // chunks of 21,845 triangles (3 unique vertices per triangle)
+  // for indices to fit into 16 bit integer number
+  // floor(2^16 / 3) = 21845
+
+  var chunkSize = 21845;
+
+  var indices = geometry.attributes.index.array;
+
+  for (var i = 0; i < indices.length; i++) {
+    indices[i] = i % (3 * chunkSize);
+  }
+
+  var positions = geometry.attributes.position.array;
+  var colors = geometry.attributes.color.array;
+
+  var n = 800,
+    n2 = n / 2; // triangles spread in the cube
+  var d = 12,
+    d2 = d / 2; // individual triangle size
+
+  var addTriangle = function (
+    k,
+    ax,
+    ay,
+    az,
+    bx,
+    by,
+    bz,
+    cx,
+    cy,
+    cz,
+    lat,
+    lng,
+    color
+  ) {
+    var p = k * 3;
+    var i = p * 3;
+    var colorIndex = Math.floor(Math.random() * myColors.length);
+    var colorRGB = myColors[colorIndex].rgb();
+
+    lng_values[p] = lng;
+    lng_values[p + 1] = lng;
+    lng_values[p + 2] = lng;
+
+    positions[i] = ax;
+    positions[i + 1] = ay;
+    positions[i + 2] = az;
+
+    positions[i + 3] = bx;
+    positions[i + 4] = by;
+    positions[i + 5] = bz;
+
+    positions[i + 6] = cx;
+    positions[i + 7] = cy;
+    positions[i + 8] = cz;
+
+    colors[i] = color.r;
+    colors[i + 1] = color.g;
+    colors[i + 2] = color.b;
+
+    colors[i + 3] = color.r;
+    colors[i + 4] = color.g;
+    colors[i + 5] = color.b;
+
+    colors[i + 6] = color.r;
+    colors[i + 7] = color.g;
+    colors[i + 8] = color.b;
+  };
+
+  for (var i = 0; i < this.tiles.length; i++) {
+    var t = this.tiles[i];
+    var k = i * 4;
+
+    var colorIndex = Math.floor(Math.random() * myColors.length);
+    var colorRGB = myColors[colorIndex].rgb();
+    var color = new THREE.Color();
+
+    color.setRGB(colorRGB[0] / 255.0, colorRGB[1] / 255.0, colorRGB[2] / 255.0);
+
+    addTriangle(
+      k,
+      t.b[0].x,
+      t.b[0].y,
+      t.b[0].z,
+      t.b[1].x,
+      t.b[1].y,
+      t.b[1].z,
+      t.b[2].x,
+      t.b[2].y,
+      t.b[2].z,
+      t.lat,
+      t.lon,
+      color
+    );
+    addTriangle(
+      k + 1,
+      t.b[0].x,
+      t.b[0].y,
+      t.b[0].z,
+      t.b[2].x,
+      t.b[2].y,
+      t.b[2].z,
+      t.b[3].x,
+      t.b[3].y,
+      t.b[3].z,
+      t.lat,
+      t.lon,
+      color
+    );
+    addTriangle(
+      k + 2,
+      t.b[0].x,
+      t.b[0].y,
+      t.b[0].z,
+      t.b[3].x,
+      t.b[3].y,
+      t.b[3].z,
+      t.b[4].x,
+      t.b[4].y,
+      t.b[4].z,
+      t.lat,
+      t.lon,
+      color
+    );
+
+    if (t.b.length > 5) {
+      // for the occasional pentagon that i have to deal with
+      addTriangle(
+        k + 3,
+        t.b[0].x,
+        t.b[0].y,
+        t.b[0].z,
+        t.b[5].x,
+        t.b[5].y,
+        t.b[5].z,
+        t.b[4].x,
+        t.b[4].y,
+        t.b[4].z,
+        t.lat,
+        t.lon,
+        color
+      );
     }
+  }
 
-    var pointVertexShader = [
-        "#define PI 3.141592653589793238462643",
-        "#define DISTANCE 500.0",
-        "#define INTRODURATION " + (parseFloat(this.introLinesDuration) + .00001),
-        "#define INTROALTITUDE " + (parseFloat(this.introLinesAltitude) + .00001),
-        "attribute float lng;",
-        "uniform float currentTime;",
-        "varying vec4 vColor;",
-        "",
-        "void main()",
-        "{",
-        "   vec3 newPos = position;",
-        "   float opacityVal = 0.0;",
-        "   float introStart = INTRODURATION * ((180.0 + lng)/360.0);",
-        "   if(currentTime > introStart){",
-        "      opacityVal = 1.0;",
-        "   }",
-        "   if(currentTime > introStart && currentTime < introStart + INTRODURATION / 8.0){",
-        "      newPos = position * INTROALTITUDE;",
-        "      opacityVal = .3;",
-        "   }",
-        "   if(currentTime > introStart + INTRODURATION / 8.0 && currentTime < introStart + INTRODURATION / 8.0 + 200.0){",
-        "      newPos = position * (1.0 + ((INTROALTITUDE-1.0) * (1.0-(currentTime - introStart-(INTRODURATION/8.0))/200.0)));",
-        "   }",
-        "   vColor = vec4( color, opacityVal );", //     set color associated to vertex; use later in fragment shader.
-        "   gl_Position = projectionMatrix * modelViewMatrix * vec4(newPos, 1.0);",
-        "}"
-    ].join("\n");
+  geometry.offsets = [];
 
-    var pointFragmentShader = [
-        "varying vec4 vColor;",     
-        "void main()", 
-        "{",
-        "   gl_FragColor = vColor;",
-        "   float depth = gl_FragCoord.z / gl_FragCoord.w;",
-        "   float fogFactor = smoothstep(" + parseInt(this.cameraDistance) +".0," + (parseInt(this.cameraDistance+300)) +".0, depth );",
-        "   vec3 fogColor = vec3(0.0);",
-        "   gl_FragColor = mix( vColor, vec4( fogColor, gl_FragColor.w ), fogFactor );",
-        "}"
-    ].join("\n");
+  var offsets = triangles / chunkSize;
 
-    var pointAttributes = {
-        lng: {type: 'f', value: null}
+  for (var i = 0; i < offsets; i++) {
+    var offset = {
+      start: i * chunkSize * 3,
+      index: i * chunkSize * 3,
+      count: Math.min(triangles - i * chunkSize, chunkSize) * 3,
     };
 
-    this.pointUniforms = {
-        currentTime: { type: 'f', value: 0.0}
-    }
+    geometry.offsets.push(offset);
+  }
 
-    var pointMaterial = new THREE.ShaderMaterial( {
-        uniforms:       this.pointUniforms,
-        attributes:     pointAttributes,
-        vertexShader:   pointVertexShader,
-        fragmentShader: pointFragmentShader,
-        transparent:    true,
-        vertexColors: THREE.VertexColors,
-        side: THREE.DoubleSide
-    });
+  geometry.computeBoundingSphere();
 
-    var triangles = this.tiles.length * 4;
-
-    var geometry = new THREE.BufferGeometry();
-
-    geometry.addAttribute( 'index', Uint16Array, triangles * 3, 1 );
-    geometry.addAttribute( 'position', Float32Array, triangles * 3, 3 );
-    geometry.addAttribute( 'normal', Float32Array, triangles * 3, 3 );
-    geometry.addAttribute( 'color', Float32Array, triangles * 3, 3 );
-    geometry.addAttribute( 'lng', Float32Array, triangles * 3, 1 );
-
-    var lng_values = geometry.attributes.lng.array;
-
-    var baseColorSet = pusherColor(this.baseColor).hueSet();
-    var myColors = [];
-    for(var i = 0; i< baseColorSet.length; i++){
-        myColors.push(baseColorSet[i].shade(Math.random()/3.0));
-    }
-
-    // break geometry into
-    // chunks of 21,845 triangles (3 unique vertices per triangle)
-    // for indices to fit into 16 bit integer number
-    // floor(2^16 / 3) = 21845
-
-    var chunkSize = 21845;
-
-    var indices = geometry.attributes.index.array;
-
-    for ( var i = 0; i < indices.length; i ++ ) {
-
-        indices[ i ] = i % ( 3 * chunkSize );
-
-    }
-
-    var positions = geometry.attributes.position.array;
-    var colors = geometry.attributes.color.array;
-
-
-    var n = 800, n2 = n/2;  // triangles spread in the cube
-    var d = 12, d2 = d/2;   // individual triangle size
-
-    var addTriangle = function(k, ax, ay, az, bx, by, bz, cx, cy, cz, lat, lng, color){
-        var p = k * 3;
-        var i = p * 3;
-        var colorIndex = Math.floor(Math.random()*myColors.length);
-        var colorRGB = myColors[colorIndex].rgb();
-
-        lng_values[p] = lng;
-        lng_values[p+1] = lng;
-        lng_values[p+2] = lng;
-
-        positions[ i ]     = ax;
-        positions[ i + 1 ] = ay;
-        positions[ i + 2 ] = az;
-
-        positions[ i + 3 ] = bx;
-        positions[ i + 4 ] = by;
-        positions[ i + 5 ] = bz;
-
-        positions[ i + 6 ] = cx;
-        positions[ i + 7 ] = cy;
-        positions[ i + 8 ] = cz;
-
-        colors[ i ]     = color.r;
-        colors[ i + 1 ] = color.g;
-        colors[ i + 2 ] = color.b;
-
-        colors[ i + 3 ] = color.r;
-        colors[ i + 4 ] = color.g;
-        colors[ i + 5 ] = color.b;
-
-        colors[ i + 6 ] = color.r;
-        colors[ i + 7 ] = color.g;
-        colors[ i + 8 ] = color.b;
-
-    };
-
-    for(var i =0; i< this.tiles.length; i++){
-        var t = this.tiles[i];
-        var k = i * 4;
-
-        var colorIndex = Math.floor(Math.random()*myColors.length);
-        var colorRGB = myColors[colorIndex].rgb();
-        var color = new THREE.Color();
-
-        color.setRGB(colorRGB[0]/255.0, colorRGB[1]/255.0, colorRGB[2]/255.0);
-
-        addTriangle(k, t.b[0].x, t.b[0].y, t.b[0].z, t.b[1].x, t.b[1].y, t.b[1].z, t.b[2].x, t.b[2].y, t.b[2].z, t.lat, t.lon, color);
-        addTriangle(k+1, t.b[0].x, t.b[0].y, t.b[0].z, t.b[2].x, t.b[2].y, t.b[2].z, t.b[3].x, t.b[3].y, t.b[3].z, t.lat, t.lon, color);
-        addTriangle(k+2, t.b[0].x, t.b[0].y, t.b[0].z, t.b[3].x, t.b[3].y, t.b[3].z, t.b[4].x, t.b[4].y, t.b[4].z, t.lat, t.lon, color);
-
-        if(t.b.length > 5){ // for the occasional pentagon that i have to deal with
-            addTriangle(k+3, t.b[0].x, t.b[0].y, t.b[0].z, t.b[5].x, t.b[5].y, t.b[5].z, t.b[4].x, t.b[4].y, t.b[4].z, t.lat, t.lon, color);
-        }
-
-    }
-
-    geometry.offsets = [];
-
-    var offsets = triangles / chunkSize;
-
-    for ( var i = 0; i < offsets; i ++ ) {
-
-        var offset = {
-            start: i * chunkSize * 3,
-            index: i * chunkSize * 3,
-            count: Math.min( triangles - ( i * chunkSize ), chunkSize ) * 3
-        };
-
-        geometry.offsets.push( offset );
-
-    }
-
-    geometry.computeBoundingSphere();
-
-    this.hexGrid = new THREE.Mesh( geometry, pointMaterial );
-    this.scene.add( this.hexGrid );
-
+  this.hexGrid = new THREE.Mesh(geometry, pointMaterial);
+  this.scene.add(this.hexGrid);
 };
 
-var createIntroLines = function(){
-    var sPoint;
-    var introLinesMaterial = new THREE.LineBasicMaterial({
-        color: this.introLinesColor,
-        transparent: true,
-        linewidth: 2,
-        opacity: .5
-    });
+var createIntroLines = function () {
+  var sPoint;
+  var introLinesMaterial = new THREE.LineBasicMaterial({
+    color: this.introLinesColor,
+    transparent: true,
+    linewidth: 2,
+    opacity: 0.5,
+  });
 
-    for(var i = 0; i<this.introLinesCount; i++){
-        var geometry = new THREE.Geometry();
+  for (var i = 0; i < this.introLinesCount; i++) {
+    var geometry = new THREE.Geometry();
 
-        var lat = Math.random()*180 + 90;
-        var lon =  Math.random()*5;
-        var lenBase = 4 + Math.floor(Math.random()*5);
+    var lat = Math.random() * 180 + 90;
+    var lon = Math.random() * 5;
+    var lenBase = 4 + Math.floor(Math.random() * 5);
 
-        if(Math.random()<.3){
-            lon = Math.random()*30 - 50;
-            lenBase = 3 + Math.floor(Math.random()*3);
-        }
-
-        for(var j = 0; j< lenBase; j++){
-            var thisPoint = utils.mapPoint(lat, lon - j * 5);
-            sPoint = new THREE.Vector3(thisPoint.x*this.introLinesAltitude, thisPoint.y*this.introLinesAltitude, thisPoint.z*this.introLinesAltitude);
-
-            geometry.vertices.push(sPoint);  
-        }
-
-        this.introLines.add(new THREE.Line(geometry, introLinesMaterial));
-
+    if (Math.random() < 0.3) {
+      lon = Math.random() * 30 - 50;
+      lenBase = 3 + Math.floor(Math.random() * 3);
     }
-    this.scene.add(this.introLines);
+
+    for (var j = 0; j < lenBase; j++) {
+      var thisPoint = utils.mapPoint(lat, lon - j * 5);
+      sPoint = new THREE.Vector3(
+        thisPoint.x * this.introLinesAltitude,
+        thisPoint.y * this.introLinesAltitude,
+        thisPoint.z * this.introLinesAltitude
+      );
+
+      geometry.vertices.push(sPoint);
+    }
+
+    this.introLines.add(new THREE.Line(geometry, introLinesMaterial));
+  }
+  this.scene.add(this.introLines);
 };
 
 /* globe constructor */
 
-function Globe(width, height, opts){
-    var baseSampleMultiplier = .7;
+function Globe(width, height, opts) {
+  var baseSampleMultiplier = 0.7;
 
-    if(!opts){
-        opts = {};
+  if (!opts) {
+    opts = {};
+  }
+
+  this.width = width;
+  this.height = height;
+  // this.smokeIndex = 0;
+  this.points = [];
+  this.introLines = new THREE.Object3D();
+  this.pins = [];
+  this.markers = [];
+  this.satelliteAnimations = [];
+  this.satelliteMeshes = [];
+  this.satellites = {};
+  this.quadtree = new Quadtree2(new Vec2(180, 360), 5);
+  this.active = true;
+
+  var defaults = {
+    font: "Inconsolata",
+    baseColor: "#ffcc00",
+    markerColor: "#ffcc00",
+    pinColor: "#00eeee",
+    satelliteColor: "#ff0000",
+    blankPercentage: 0,
+    thinAntarctica: 0.01, // only show 1% of antartica... you can't really see it on the map anyhow
+    mapUrl: "resources/equirectangle_projection.png",
+    introLinesAltitude: 1.1,
+    introLinesDuration: 2000,
+    introLinesColor: "#8FD8D8",
+    introLinesCount: 60,
+    scale: 1.0,
+    dayLength: 28000,
+    pointsPerDegree: 1.1,
+    pointSize: 0.6,
+    pointsVariance: 0.2,
+    maxPins: 500,
+    maxMarkers: 4,
+    data: [],
+    tiles: [],
+    viewAngle: 0,
+  };
+
+  for (var i in defaults) {
+    if (!this[i]) {
+      this[i] = defaults[i];
+      if (opts[i]) {
+        this[i] = opts[i];
+      }
     }
+  }
 
-    this.width = width;
-    this.height = height;
-    // this.smokeIndex = 0;
-    this.points = [];
-    this.introLines = new THREE.Object3D();
-    this.pins = [];
-    this.markers = [];
-    this.satelliteAnimations = [];
-    this.satelliteMeshes = [];
-    this.satellites = {};
-    this.quadtree = new Quadtree2(new Vec2(180, 360), 5);
-    this.active = true;
+  this.setScale(this.scale);
 
-    var defaults = {
-        font: "Inconsolata",
-        baseColor: "#ffcc00",
-        markerColor: "#ffcc00",
-        pinColor: "#00eeee",
-        satelliteColor: "#ff0000",
-        blankPercentage: 0,
-        thinAntarctica: .01, // only show 1% of antartica... you can't really see it on the map anyhow
-        mapUrl: "resources/equirectangle_projection.png",
-        introLinesAltitude: 1.10,
-        introLinesDuration: 2000,
-        introLinesColor: "#8FD8D8",
-        introLinesCount: 60,
-        scale: 1.0,
-        dayLength: 28000,
-        pointsPerDegree: 1.1,
-        pointSize: .6,
-        pointsVariance: .2,
-        maxPins: 500,
-        maxMarkers: 4,
-        data: [],
-        tiles: [],
-        viewAngle: 0
-    };
+  this.renderer = new THREE.WebGLRenderer({ antialias: true });
+  this.renderer.setSize(this.width, this.height);
 
-    for(var i in defaults){
-        if(!this[i]){
-            this[i] = defaults[i];
-            if(opts[i]){
-                this[i] = opts[i];
-            }
-        }
-    }
+  this.renderer.gammaInput = true;
+  this.renderer.gammaOutput = true;
 
-    this.setScale(this.scale);
+  this.domElement = this.renderer.domElement;
 
-    this.renderer = new THREE.WebGLRenderer( { antialias: true } );
-    this.renderer.setSize( this.width, this.height);
+  this.data.sort(function (a, b) {
+    return b.lng - b.label.length * 2 - (a.lng - a.label.length * 2);
+  });
 
-    this.renderer.gammaInput = true;
-    this.renderer.gammaOutput = true;
-
-    this.domElement = this.renderer.domElement;
-
-    this.data.sort(function(a,b){return (b.lng - b.label.length * 2) - (a.lng - a.label.length * 2)});
-
-    for(var i = 0; i< this.data.length; i++){
-        this.data[i].when = this.introLinesDuration*((180+this.data[i].lng)/360.0) + 500; 
-    }
-
-
+  for (var i = 0; i < this.data.length; i++) {
+    this.data[i].when =
+      this.introLinesDuration * ((180 + this.data[i].lng) / 360.0) + 500;
+  }
 }
 
 /* public globe functions */
 
-Globe.prototype.init = function(cb){
+Globe.prototype.init = function (cb) {
+  // create the camera
+  this.camera = new THREE.PerspectiveCamera(
+    50,
+    this.width / this.height,
+    1,
+    this.cameraDistance + 300
+  );
+  this.camera.position.z = this.cameraDistance;
 
-    // create the camera
-    this.camera = new THREE.PerspectiveCamera( 50, this.width / this.height, 1, this.cameraDistance + 300 );
-    this.camera.position.z = this.cameraDistance;
+  this.cameraAngle = Math.PI;
 
-    this.cameraAngle=(Math.PI);
+  // create the scene
+  this.scene = new THREE.Scene();
 
-    // create the scene
-    this.scene = new THREE.Scene();
+  this.scene.fog = new THREE.Fog(
+    0x000000,
+    this.cameraDistance,
+    this.cameraDistance + 300
+  );
 
-    this.scene.fog = new THREE.Fog( 0x000000, this.cameraDistance, this.cameraDistance+300 );
+  createIntroLines.call(this);
 
-    createIntroLines.call(this);
+  // create the smoke particles
 
-    // create the smoke particles
+  this.smokeProvider = new SmokeProvider(this.scene);
 
-    this.smokeProvider = new SmokeProvider(this.scene);
-
-    createParticles.call(this);
-    setTimeout(cb, 500);
+  createParticles.call(this);
+  setTimeout(cb, 500);
 };
 
-Globe.prototype.destroy = function(callback){
+Globe.prototype.destroy = function (callback) {
+  var _this = this;
+  this.active = false;
 
-    var _this = this;
-    this.active = false;
-
-    setTimeout(function(){
-        while(_this.scene.children.length > 0){
-            _this.scene.remove(_this.scene.children[0]);
-        }
-        if(typeof callback == "function"){
-            callback();
-        }
-
-    }, 1000);
-
+  setTimeout(function () {
+    while (_this.scene.children.length > 0) {
+      _this.scene.remove(_this.scene.children[0]);
+    }
+    if (typeof callback == "function") {
+      callback();
+    }
+  }, 1000);
 };
 
-Globe.prototype.addPin = function(lat, lon, text){
+Globe.prototype.addPin = function (lat, lon, text) {
+  lat = parseFloat(lat);
+  lon = parseFloat(lon);
 
-    lat = parseFloat(lat);
-    lon = parseFloat(lon);
+  var opts = {
+    lineColor: this.pinColor,
+    topColor: this.pinColor,
+    font: this.font,
+  };
 
-    var opts = {
-        lineColor: this.pinColor,
-        topColor: this.pinColor,
-        font: this.font
-    }
+  var altitude = 1.2;
 
-    var altitude = 1.2;
+  if (typeof text != "string" || text.length === 0) {
+    altitude -= 0.05 + Math.random() * 0.05;
+  }
 
-    if(typeof text != "string" || text.length === 0){
-        altitude -= .05 + Math.random() * .05;
-    }
+  var pin = new Pin(
+    lat,
+    lon,
+    text,
+    altitude,
+    this.scene,
+    this.smokeProvider,
+    opts
+  );
 
-    var pin = new Pin(lat, lon, text, altitude, this.scene, this.smokeProvider, opts);
+  this.pins.push(pin);
 
-    this.pins.push(pin);
+  // lets add quadtree stuff
 
-    // lets add quadtree stuff
+  var pos = latLon2d(lat, lon);
 
-    var pos = latLon2d(lat, lon);
+  pin.pos_ = new Vec2(parseInt(pos.x), parseInt(pos.y));
 
-    pin.pos_ = new Vec2(parseInt(pos.x),parseInt(pos.y)); 
+  if (text.length > 0) {
+    pin.rad_ = pos.rad;
+  } else {
+    pin.rad_ = 1;
+  }
 
-    if(text.length > 0){
-        pin.rad_ = pos.rad;
-    } else {
-        pin.rad_ = 1;
-    }
+  this.quadtree.addObject(pin);
 
-    this.quadtree.addObject(pin);
+  if (text.length > 0) {
+    var collisions = this.quadtree.getCollisionsForObject(pin);
+    var collisionCount = 0;
+    var tooYoungCount = 0;
+    var hidePins = [];
 
-    if(text.length > 0){
-        var collisions = this.quadtree.getCollisionsForObject(pin);
-        var collisionCount = 0;
-        var tooYoungCount = 0;
-        var hidePins = [];
-
-        for(var i in collisions){
-            if(collisions[i].text.length > 0){
-                collisionCount++;
-                if(collisions[i].age() > 5000){
-                    hidePins.push(collisions[i]);
-                } else {
-                    tooYoungCount++;
-                }
-            }
+    for (var i in collisions) {
+      if (collisions[i].text.length > 0) {
+        collisionCount++;
+        if (collisions[i].age() > 5000) {
+          hidePins.push(collisions[i]);
+        } else {
+          tooYoungCount++;
         }
-
-        if(collisionCount > 0 && tooYoungCount == 0){
-            for(var i = 0; i< hidePins.length; i++){
-                hidePins[i].hideLabel();
-                hidePins[i].hideSmoke();
-                hidePins[i].hideTop();
-                hidePins[i].changeAltitude(Math.random() * .05 + 1.1);
-            }
-        } else if (collisionCount > 0){
-            pin.hideLabel();
-            pin.hideSmoke();
-            pin.hideTop();
-            pin.changeAltitude(Math.random() * .05 + 1.1);
-        }
+      }
     }
 
-    if(this.pins.length > this.maxPins){
-        var oldPin = this.pins.shift();
-        this.quadtree.removeObject(oldPin);
-        oldPin.remove();
-
+    if (collisionCount > 0 && tooYoungCount == 0) {
+      for (var i = 0; i < hidePins.length; i++) {
+        hidePins[i].hideLabel();
+        hidePins[i].hideSmoke();
+        hidePins[i].hideTop();
+        hidePins[i].changeAltitude(Math.random() * 0.05 + 1.1);
+      }
+    } else if (collisionCount > 0) {
+      pin.hideLabel();
+      pin.hideSmoke();
+      pin.hideTop();
+      pin.changeAltitude(Math.random() * 0.05 + 1.1);
     }
+  }
 
-    return pin;
+  if (this.pins.length > this.maxPins) {
+    var oldPin = this.pins.shift();
+    this.quadtree.removeObject(oldPin);
+    oldPin.remove();
+  }
 
-}
-
-Globe.prototype.addMarker = function(lat, lon, text, connected){
-
-    var marker;
-    var opts = {
-        markerColor: this.markerColor,
-        lineColor: this.markerColor,
-        font: this.font
-    };
-
-    if(typeof connected == "boolean" && connected){
-        marker = new Marker(lat, lon, text, 1.2, this.markers[this.markers.length-1], this.scene, opts);
-    } else if(typeof connected == "object"){
-        marker = new Marker(lat, lon, text, 1.2, connected, this.scene, opts);
-    } else {
-        marker = new Marker(lat, lon, text, 1.2, null, this.scene, opts);
-    }
-
-    this.markers.push(marker);
-
-    if(this.markers.length > this.maxMarkers){
-        this.markers.shift().remove();
-    }
-
-    return marker;
-}
-
-Globe.prototype.addSatellite = function(lat, lon, altitude, opts, texture, animator){
-    /* texture and animator are optimizations so we don't have to regenerate certain 
-     * redundant assets */
-
-    if(!opts){
-        opts = {};
-    }
-
-    if(opts.coreColor == undefined){
-        opts.coreColor = this.satelliteColor;
-    }
-
-    var satellite = new Satellite(lat, lon, altitude, this.scene, opts, texture, animator);
-
-    if(!this.satellites[satellite.toString()]){
-        this.satellites[satellite.toString()] = satellite;
-    }
-
-    satellite.onRemove(function(){
-            delete this.satellites[satellite.toString()];
-            }.bind(this));
-
-    return satellite;
-
+  return pin;
 };
 
-Globe.prototype.addConstellation = function(sats, opts){
+Globe.prototype.addMarker = function (lat, lon, text, connected) {
+  var marker;
+  var opts = {
+    markerColor: this.markerColor,
+    lineColor: this.markerColor,
+    font: this.font,
+  };
 
-    /* TODO: make it so that when you remove the first in a constellation it removes all others */
+  if (typeof connected == "boolean" && connected) {
+    marker = new Marker(
+      lat,
+      lon,
+      text,
+      1.2,
+      this.markers[this.markers.length - 1],
+      this.scene,
+      opts
+    );
+  } else if (typeof connected == "object") {
+    marker = new Marker(lat, lon, text, 1.2, connected, this.scene, opts);
+  } else {
+    marker = new Marker(lat, lon, text, 1.2, null, this.scene, opts);
+  }
 
-    var texture,
+  this.markers.push(marker);
+
+  if (this.markers.length > this.maxMarkers) {
+    this.markers.shift().remove();
+  }
+
+  return marker;
+};
+
+Globe.prototype.addSatellite = function (
+  lat,
+  lon,
+  altitude,
+  opts,
+  texture,
+  animator
+) {
+  /* texture and animator are optimizations so we don't have to regenerate certain
+   * redundant assets */
+
+  if (!opts) {
+    opts = {};
+  }
+
+  if (opts.coreColor == undefined) {
+    opts.coreColor = this.satelliteColor;
+  }
+
+  var satellite = new Satellite(
+    lat,
+    lon,
+    altitude,
+    this.scene,
+    opts,
+    texture,
+    animator
+  );
+
+  if (!this.satellites[satellite.toString()]) {
+    this.satellites[satellite.toString()] = satellite;
+  }
+
+  satellite.onRemove(
+    function () {
+      delete this.satellites[satellite.toString()];
+    }.bind(this)
+  );
+
+  return satellite;
+};
+
+Globe.prototype.addConstellation = function (sats, opts) {
+  /* TODO: make it so that when you remove the first in a constellation it removes all others */
+
+  var texture,
     animator,
     satellite,
     constellation = [];
 
-    for(var i = 0; i< sats.length; i++){
-        if(i === 0){
-            satellite = this.addSatellite(sats[i].lat, sats[i].lon, sats[i].altitude, opts);
-        } else {
-            satellite = this.addSatellite(sats[i].lat, sats[i].lon, sats[i].altitude, opts, constellation[0].canvas, constellation[0].texture);
-        }
-        constellation.push(satellite);
-
+  for (var i = 0; i < sats.length; i++) {
+    if (i === 0) {
+      satellite = this.addSatellite(
+        sats[i].lat,
+        sats[i].lon,
+        sats[i].altitude,
+        opts
+      );
+    } else {
+      satellite = this.addSatellite(
+        sats[i].lat,
+        sats[i].lon,
+        sats[i].altitude,
+        opts,
+        constellation[0].canvas,
+        constellation[0].texture
+      );
     }
+    constellation.push(satellite);
+  }
 
-    return constellation;
-
+  return constellation;
 };
 
+Globe.prototype.setMaxPins = function (_maxPins) {
+  this.maxPins = _maxPins;
 
-Globe.prototype.setMaxPins = function(_maxPins){
-    this.maxPins = _maxPins;
-
-    while(this.pins.length > this.maxPins){
-        var oldPin = this.pins.shift();
-        this.quadtree.removeObject(oldPin);
-        oldPin.remove();
-    }
+  while (this.pins.length > this.maxPins) {
+    var oldPin = this.pins.shift();
+    this.quadtree.removeObject(oldPin);
+    oldPin.remove();
+  }
 };
 
-Globe.prototype.setMaxMarkers = function(_maxMarkers){
-    this.maxMarkers = _maxMarkers;
-    while(this.markers.length > this.maxMarkers){
-        this.markers.shift().remove();
-    }
+Globe.prototype.setMaxMarkers = function (_maxMarkers) {
+  this.maxMarkers = _maxMarkers;
+  while (this.markers.length > this.maxMarkers) {
+    this.markers.shift().remove();
+  }
 };
 
-Globe.prototype.setBaseColor = function(_color){
-    this.baseColor = _color;
+Globe.prototype.setBaseColor = function (_color) {
+  this.baseColor = _color;
+  createParticles.call(this);
+};
+
+Globe.prototype.setMarkerColor = function (_color) {
+  this.markerColor = _color;
+  this.scene._encom_markerTexture = null;
+};
+
+Globe.prototype.setPinColor = function (_color) {
+  this.pinColor = _color;
+};
+
+Globe.prototype.setScale = function (_scale) {
+  this.scale = _scale;
+  this.cameraDistance = 1700 / _scale;
+  if (this.scene && this.scene.fog) {
+    this.scene.fog.near = this.cameraDistance;
+    this.scene.fog.far = this.cameraDistance + 300;
     createParticles.call(this);
+    this.camera.far = this.cameraDistance + 300;
+    this.camera.updateProjectionMatrix();
+  }
 };
 
-Globe.prototype.setMarkerColor = function(_color){
-    this.markerColor = _color;
-    this.scene._encom_markerTexture = null;
+Globe.prototype.tick = function () {
+  if (!this.camera) {
+    return;
+  }
 
-};
+  if (!this.firstRunTime) {
+    this.firstRunTime = Date.now();
+  }
+  addInitialData.call(this);
+  TWEEN.update();
 
-Globe.prototype.setPinColor = function(_color){
-    this.pinColor = _color;
-};
-
-Globe.prototype.setScale = function(_scale){
-    this.scale = _scale;
-    this.cameraDistance = 1700/_scale;
-    if(this.scene && this.scene.fog){
-       this.scene.fog.near = this.cameraDistance;
-       this.scene.fog.far = this.cameraDistance + 300;
-       createParticles.call(this);
-       this.camera.far = this.cameraDistance + 300;
-       this.camera.updateProjectionMatrix();
-    }
-};
-
-Globe.prototype.tick = function(){
-
-    if(!this.camera){
-        return;
-    }
-
-    if(!this.firstRunTime){
-        this.firstRunTime = Date.now();
-    }
-    addInitialData.call(this);
-    TWEEN.update();
-
-    if(!this.lastRenderDate){
-        this.lastRenderDate = new Date();
-    }
-
-    if(!this.firstRenderDate){
-        this.firstRenderDate = new Date();
-    }
-
-    this.totalRunTime = new Date() - this.firstRenderDate;
-
-    var renderTime = new Date() - this.lastRenderDate;
+  if (!this.lastRenderDate) {
     this.lastRenderDate = new Date();
-    var rotateCameraBy = (2 * Math.PI)/(this.dayLength/renderTime);
+  }
 
-    this.cameraAngle += rotateCameraBy;
+  if (!this.firstRenderDate) {
+    this.firstRenderDate = new Date();
+  }
 
-    if(!this.active){
-        this.cameraDistance += (1000 * renderTime/1000);
+  this.totalRunTime = new Date() - this.firstRenderDate;
+
+  var renderTime = new Date() - this.lastRenderDate;
+  this.lastRenderDate = new Date();
+  var rotateCameraBy = (2 * Math.PI) / (this.dayLength / renderTime);
+
+  this.cameraAngle += rotateCameraBy;
+
+  if (!this.active) {
+    this.cameraDistance += (1000 * renderTime) / 1000;
+  }
+
+  this.camera.position.x =
+    this.cameraDistance * Math.cos(this.cameraAngle) * Math.cos(this.viewAngle);
+  this.camera.position.y = Math.sin(this.viewAngle) * this.cameraDistance;
+  this.camera.position.z =
+    this.cameraDistance * Math.sin(this.cameraAngle) * Math.cos(this.viewAngle);
+
+  for (var i in this.satellites) {
+    this.satellites[i].tick(this.camera.position, this.cameraAngle, renderTime);
+  }
+
+  for (var i = 0; i < this.satelliteMeshes.length; i++) {
+    var mesh = this.satelliteMeshes[i];
+    mesh.lookAt(this.camera.position);
+    mesh.rotateZ((mesh.tiltDirection * Math.PI) / 2);
+    mesh.rotateZ(
+      Math.sin(this.cameraAngle + (mesh.lon / 180) * Math.PI) *
+        mesh.tiltMultiplier *
+        mesh.tiltDirection *
+        -1
+    );
+  }
+
+  if (this.introLinesDuration > this.totalRunTime) {
+    if (this.totalRunTime / this.introLinesDuration < 0.1) {
+      this.introLines.children[0].material.opacity =
+        (this.totalRunTime / this.introLinesDuration) * (1 / 0.1) - 0.2;
     }
-
-
-    this.camera.position.x = this.cameraDistance * Math.cos(this.cameraAngle) * Math.cos(this.viewAngle);
-    this.camera.position.y = Math.sin(this.viewAngle) * this.cameraDistance;
-    this.camera.position.z = this.cameraDistance * Math.sin(this.cameraAngle) * Math.cos(this.viewAngle);
-
-
-    for(var i in this.satellites){
-        this.satellites[i].tick(this.camera.position, this.cameraAngle, renderTime);
+    if (this.totalRunTime / this.introLinesDuration > 0.8) {
+      this.introLines.children[0].material.opacity =
+        Math.max(1 - this.totalRunTime / this.introLinesDuration, 0) *
+        (1 / 0.2);
+    } else {
+      this.introLines.children[0].material.opacity = 1;
     }
+    this.introLines.rotateY(
+      (2 * Math.PI) / (this.introLinesDuration / renderTime)
+    );
+  } else if (this.introLines) {
+    this.scene.remove(this.introLines);
+    delete [this.introLines];
+  }
 
-    for(var i = 0; i< this.satelliteMeshes.length; i++){
-        var mesh = this.satelliteMeshes[i];
-        mesh.lookAt(this.camera.position);
-        mesh.rotateZ(mesh.tiltDirection * Math.PI/2);
-        mesh.rotateZ(Math.sin(this.cameraAngle + (mesh.lon / 180) * Math.PI) * mesh.tiltMultiplier * mesh.tiltDirection * -1);
+  // do the shaders
 
-    }
+  this.pointUniforms.currentTime.value = this.totalRunTime;
 
-    if(this.introLinesDuration > this.totalRunTime){
-        if(this.totalRunTime/this.introLinesDuration < .1){
-            this.introLines.children[0].material.opacity = (this.totalRunTime/this.introLinesDuration) * (1 / .1) - .2;
-        }if(this.totalRunTime/this.introLinesDuration > .8){
-            this.introLines.children[0].material.opacity = Math.max(1-this.totalRunTime/this.introLinesDuration,0) * (1 / .2);
-        } else {
-            this.introLines.children[0].material.opacity = 1;
-        }
-        this.introLines.rotateY((2 * Math.PI)/(this.introLinesDuration/renderTime));
-    } else if(this.introLines){
-        this.scene.remove(this.introLines);
-        delete[this.introLines];
-    }
+  this.smokeProvider.tick(this.totalRunTime);
 
-    // do the shaders
-
-    this.pointUniforms.currentTime.value = this.totalRunTime;
-
-    this.smokeProvider.tick(this.totalRunTime);
-
-    this.camera.lookAt( this.scene.position );
-    this.renderer.render( this.scene, this.camera );
-
-}
+  this.camera.lookAt(this.scene.position);
+  this.renderer.render(this.scene, this.camera);
+};
 
 module.exports = Globe;
 
-
 },{"./Marker":16,"./Pin":17,"./Satellite":18,"./SmokeProvider":19,"./utils":21,"hexasphere.js":3,"pusher.color":6,"quadtree2":8,"three":12,"tween.js":13,"vec2":14}],16:[function(require,module,exports){
-var THREE = require('three'),
-    TWEEN = require('tween.js'),
-    utils = require('./utils');
+var THREE = require("three"),
+  TWEEN = require("tween.js"),
+  utils = require("./utils");
 
-var createMarkerTexture = function(markerColor) {
-    var markerWidth = 30,
-        markerHeight = 30,
-        canvas,
-        texture;
+var createMarkerTexture = function (markerColor) {
+  var markerWidth = 30,
+    markerHeight = 30,
+    canvas,
+    texture;
 
-    canvas =  utils.renderToCanvas(markerWidth, markerHeight, function(ctx){
-        ctx.fillStyle=markerColor;
-        ctx.strokeStyle=markerColor;
-        ctx.lineWidth=3;
-        ctx.beginPath();
-        ctx.arc(markerWidth/2, markerHeight/2, markerWidth/3, 0, 2* Math.PI);
-        ctx.stroke();
+  canvas = utils.renderToCanvas(markerWidth, markerHeight, function (ctx) {
+    ctx.fillStyle = markerColor;
+    ctx.strokeStyle = markerColor;
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.arc(markerWidth / 2, markerHeight / 2, markerWidth / 3, 0, 2 * Math.PI);
+    ctx.stroke();
 
-        ctx.beginPath();
-        ctx.arc(markerWidth/2, markerHeight/2, markerWidth/5, 0, 2* Math.PI);
-        ctx.fill();
+    ctx.beginPath();
+    ctx.arc(markerWidth / 2, markerHeight / 2, markerWidth / 5, 0, 2 * Math.PI);
+    ctx.fill();
+  });
 
-    });
+  texture = new THREE.Texture(canvas);
+  texture.needsUpdate = true;
 
-    texture = new THREE.Texture(canvas);
-    texture.needsUpdate = true;
-
-    return texture;
-
+  return texture;
 };
 
-var Marker = function(lat, lon, text, altitude, previous, scene, _opts){
+var Marker = function (lat, lon, text, altitude, previous, scene, _opts) {
+  /* options that can be passed in */
+  var opts = {
+    lineColor: "#FFCC00",
+    lineWidth: 1,
+    markerColor: "#FFCC00",
+    labelColor: "#FFF",
+    font: "Inconsolata",
+    fontSize: 20,
+    drawTime: 2000,
+    lineSegments: 150,
+  };
 
-    /* options that can be passed in */
-    var opts = {
-        lineColor: "#FFCC00",
-        lineWidth: 1,
-        markerColor: "#FFCC00",
-        labelColor: "#FFF",
-        font: "Inconsolata",
-        fontSize: 20,
-        drawTime: 2000,
-        lineSegments: 150
+  var point,
+    previousPoint,
+    markerMaterial,
+    labelCanvas,
+    labelTexture,
+    labelMaterial;
+
+  this.lat = parseFloat(lat);
+  this.lon = parseFloat(lon);
+  this.text = text;
+  this.altitude = parseFloat(altitude);
+  this.scene = scene;
+  this.previous = previous;
+  this.next = [];
+
+  if (this.previous) {
+    this.previous.next.push(this);
+  }
+
+  if (_opts) {
+    for (var i in opts) {
+      if (_opts[i] != undefined) {
+        opts[i] = _opts[i];
+      }
     }
+  }
 
-    var point,
-        previousPoint,
-        markerMaterial,
-        labelCanvas,
-        labelTexture,
-        labelMaterial
-        ;
+  this.opts = opts;
 
+  point = utils.mapPoint(lat, lon);
 
-    this.lat = parseFloat(lat);
-    this.lon = parseFloat(lon);
-    this.text = text;
-    this.altitude = parseFloat(altitude);
-    this.scene = scene;
-    this.previous = previous;
-    this.next = [];
+  if (previous) {
+    previousPoint = utils.mapPoint(previous.lat, previous.lon);
+  }
 
-    if(this.previous){
-        this.previous.next.push(this);
-    }
+  if (!scene._encom_markerTexture) {
+    scene._encom_markerTexture = createMarkerTexture(this.opts.markerColor);
+  }
 
-    if(_opts){
-        for(var i in opts){
-            if(_opts[i] != undefined){
-                opts[i] = _opts[i];
-            }
-        }
-    }
+  markerMaterial = new THREE.SpriteMaterial({
+    map: scene._encom_markerTexture,
+    opacity: 0.7,
+    depthTest: true,
+    fog: true,
+  });
+  this.marker = new THREE.Sprite(markerMaterial);
 
-    this.opts = opts;
+  this.marker.scale.set(0, 0);
+  this.marker.position.set(
+    point.x * altitude,
+    point.y * altitude,
+    point.z * altitude
+  );
 
-    
-    point = utils.mapPoint(lat, lon);
+  labelCanvas = utils.createLabel(
+    text.toUpperCase(),
+    this.opts.fontSize,
+    this.opts.labelColor,
+    this.opts.font,
+    this.opts.markerColor
+  );
+  labelTexture = new THREE.Texture(labelCanvas);
+  labelTexture.needsUpdate = true;
 
-    if(previous){
-        previousPoint = utils.mapPoint(previous.lat, previous.lon);
-    }
+  labelMaterial = new THREE.SpriteMaterial({
+    map: labelTexture,
+    useScreenCoordinates: false,
+    opacity: 0,
+    depthTest: true,
+    fog: true,
+  });
 
-    if(!scene._encom_markerTexture){
-        scene._encom_markerTexture = createMarkerTexture(this.opts.markerColor);
-    }
+  this.labelSprite = new THREE.Sprite(labelMaterial);
+  this.labelSprite.position = {
+    x: point.x * altitude * 1.1,
+    y: point.y * altitude * 1.05 + (point.y < 0 ? -15 : 30),
+    z: point.z * altitude * 1.1,
+  };
+  this.labelSprite.scale.set(labelCanvas.width, labelCanvas.height);
 
-    markerMaterial = new THREE.SpriteMaterial({map: scene._encom_markerTexture, opacity: .7, depthTest: true, fog: true});
-    this.marker = new THREE.Sprite(markerMaterial);
-
-    this.marker.scale.set(0, 0);
-    this.marker.position.set(point.x * altitude, point.y * altitude, point.z * altitude);
-
-    labelCanvas = utils.createLabel(text.toUpperCase(), this.opts.fontSize, this.opts.labelColor, this.opts.font, this.opts.markerColor);
-    labelTexture = new THREE.Texture(labelCanvas);
-    labelTexture.needsUpdate = true;
-
-    labelMaterial = new THREE.SpriteMaterial({
-        map : labelTexture,
-        useScreenCoordinates: false,
-        opacity: 0,
-        depthTest: true,
-        fog: true
-    });
-
-    this.labelSprite = new THREE.Sprite(labelMaterial);
-    this.labelSprite.position = {x: point.x * altitude * 1.1, y: point.y*altitude*1.05 + (point.y < 0 ? -15 : 30), z: point.z * altitude * 1.1};
-    this.labelSprite.scale.set(labelCanvas.width, labelCanvas.height);
-
-    new TWEEN.Tween( {opacity: 0})
-    .to( {opacity: 1}, 500 )
-    .onUpdate(function(){
-        labelMaterial.opacity = this.opacity
-    }).start();
-
-
-    var _this = this; //arrghghh
-
-    new TWEEN.Tween({x: 0, y: 0})
-    .to({x: 50, y: 50}, 2000)
-    .easing( TWEEN.Easing.Elastic.Out )
-    .onUpdate(function(){
-        _this.marker.scale.set(this.x, this.y);
+  new TWEEN.Tween({ opacity: 0 })
+    .to({ opacity: 1 }, 500)
+    .onUpdate(function () {
+      labelMaterial.opacity = this.opacity;
     })
-    .delay((this.previous ? _this.opts.drawTime : 0))
     .start();
 
-  if(this.previous){
+  var _this = this; //arrghghh
 
-      var materialSpline,
-          materialSplineDotted,
-          latdist,
-          londist,
-          startPoint,
-          pointList = [],
-          pointList2 = [],
-          nextlat,
-          nextlon,
-          currentLat,
-          currentLon,
-          currentPoint,
-          currentVert,
-          update;
+  new TWEEN.Tween({ x: 0, y: 0 })
+    .to({ x: 50, y: 50 }, 2000)
+    .easing(TWEEN.Easing.Elastic.Out)
+    .onUpdate(function () {
+      _this.marker.scale.set(this.x, this.y);
+    })
+    .delay(this.previous ? _this.opts.drawTime : 0)
+    .start();
 
-        _this.geometrySpline = new THREE.Geometry();
-        materialSpline = new THREE.LineBasicMaterial({
-            color: this.opts.lineColor,
-            transparent: true,
-            linewidth: 3,
-            opacity: .5
-        });
+  if (this.previous) {
+    var materialSpline,
+      materialSplineDotted,
+      latdist,
+      londist,
+      startPoint,
+      pointList = [],
+      pointList2 = [],
+      nextlat,
+      nextlon,
+      currentLat,
+      currentLon,
+      currentPoint,
+      currentVert,
+      update;
 
-        _this.geometrySplineDotted = new THREE.Geometry();
-        materialSplineDotted = new THREE.LineBasicMaterial({
-            color: this.opts.lineColor,
-            linewidth: 1,
-            transparent: true,
-            opacity: .5
-        });
+    _this.geometrySpline = new THREE.Geometry();
+    materialSpline = new THREE.LineBasicMaterial({
+      color: this.opts.lineColor,
+      transparent: true,
+      linewidth: 3,
+      opacity: 0.5,
+    });
 
-        latdist = (lat - previous.lat)/_this.opts.lineSegments;
-        londist = (lon - previous.lon)/_this.opts.lineSegments;
-        startPoint = utils.mapPoint(previous.lat,previous.lon);
-        pointList = [];
-        pointList2 = [];
+    _this.geometrySplineDotted = new THREE.Geometry();
+    materialSplineDotted = new THREE.LineBasicMaterial({
+      color: this.opts.lineColor,
+      linewidth: 1,
+      transparent: true,
+      opacity: 0.5,
+    });
 
-        for(var j = 0; j< _this.opts.lineSegments + 1; j++){
-            // var nextlat = ((90 + lat1 + j*1)%180)-90;
-            // var nextlon = ((180 + lng1 + j*1)%360)-180;
+    latdist = (lat - previous.lat) / _this.opts.lineSegments;
+    londist = (lon - previous.lon) / _this.opts.lineSegments;
+    startPoint = utils.mapPoint(previous.lat, previous.lon);
+    pointList = [];
+    pointList2 = [];
 
+    for (var j = 0; j < _this.opts.lineSegments + 1; j++) {
+      // var nextlat = ((90 + lat1 + j*1)%180)-90;
+      // var nextlon = ((180 + lng1 + j*1)%360)-180;
 
-            var nextlat = (((90 + previous.lat + j*latdist)%180)-90) * (.5 + Math.cos(j*(5*Math.PI/2)/_this.opts.lineSegments)/2) + (j*lat/_this.opts.lineSegments/2);
-            var nextlon = ((180 + previous.lon + j*londist)%360)-180;
-            pointList.push({lat: nextlat, lon: nextlon, index: j});
-            if(j == 0 || j == _this.opts.lineSegments){
-                pointList2.push({lat: nextlat, lon: nextlon, index: j});
-            } else {
-                pointList2.push({lat: nextlat+1, lon: nextlon, index: j});
-            }
-            // var thisPoint = mapPoint(nextlat, nextlon);
-            sPoint = new THREE.Vector3(startPoint.x*1.2, startPoint.y*1.2, startPoint.z*1.2);
-            sPoint2 = new THREE.Vector3(startPoint.x*1.2, startPoint.y*1.2, startPoint.z*1.2);
-            // sPoint = new THREE.Vector3(thisPoint.x*1.2, thisPoint.y*1.2, thisPoint.z*1.2);
+      var nextlat =
+        (((90 + previous.lat + j * latdist) % 180) - 90) *
+          (0.5 +
+            Math.cos((j * ((5 * Math.PI) / 2)) / _this.opts.lineSegments) / 2) +
+        (j * lat) / _this.opts.lineSegments / 2;
+      var nextlon = ((180 + previous.lon + j * londist) % 360) - 180;
+      pointList.push({ lat: nextlat, lon: nextlon, index: j });
+      if (j == 0 || j == _this.opts.lineSegments) {
+        pointList2.push({ lat: nextlat, lon: nextlon, index: j });
+      } else {
+        pointList2.push({ lat: nextlat + 1, lon: nextlon, index: j });
+      }
+      // var thisPoint = mapPoint(nextlat, nextlon);
+      sPoint = new THREE.Vector3(
+        startPoint.x * 1.2,
+        startPoint.y * 1.2,
+        startPoint.z * 1.2
+      );
+      sPoint2 = new THREE.Vector3(
+        startPoint.x * 1.2,
+        startPoint.y * 1.2,
+        startPoint.z * 1.2
+      );
+      // sPoint = new THREE.Vector3(thisPoint.x*1.2, thisPoint.y*1.2, thisPoint.z*1.2);
 
-            sPoint.globe_index = j;
-            sPoint2.globe_index = j;
+      sPoint.globe_index = j;
+      sPoint2.globe_index = j;
 
-            _this.geometrySpline.vertices.push(sPoint);  
-            _this.geometrySplineDotted.vertices.push(sPoint2);  
-        }
-
-
-        currentLat = previous.lat;
-        currentLon = previous.lon;
-        currentPoint;
-        currentVert;
-
-        update = function(){
-            var nextSpot = pointList.shift();
-            var nextSpot2 = pointList2.shift();
-
-            for(var x = 0; x< _this.geometrySpline.vertices.length; x++){
-
-                currentVert = _this.geometrySpline.vertices[x];
-                currentPoint = utils.mapPoint(nextSpot.lat, nextSpot.lon);
-
-                currentVert2 = _this.geometrySplineDotted.vertices[x];
-                currentPoint2 = utils.mapPoint(nextSpot2.lat, nextSpot2.lon);
-
-                if(x >= nextSpot.index){
-                    currentVert.set(currentPoint.x*1.2, currentPoint.y*1.2, currentPoint.z*1.2);
-                    currentVert2.set(currentPoint2.x*1.19, currentPoint2.y*1.19, currentPoint2.z*1.19);
-                }
-                _this.geometrySpline.verticesNeedUpdate = true;
-                _this.geometrySplineDotted.verticesNeedUpdate = true;
-            }
-            if(pointList.length > 0){
-                setTimeout(update,_this.opts.drawTime/_this.opts.lineSegments);
-            }
-
-        };
-
-        update();
-
-        this.scene.add(new THREE.Line(_this.geometrySpline, materialSpline));
-        this.scene.add(new THREE.Line(_this.geometrySplineDotted, materialSplineDotted, THREE.LinePieces));
+      _this.geometrySpline.vertices.push(sPoint);
+      _this.geometrySplineDotted.vertices.push(sPoint2);
     }
 
-    this.scene.add(this.marker);
-    this.scene.add(this.labelSprite);
+    currentLat = previous.lat;
+    currentLon = previous.lon;
+    currentPoint;
+    currentVert;
 
+    update = function () {
+      var nextSpot = pointList.shift();
+      var nextSpot2 = pointList2.shift();
+
+      for (var x = 0; x < _this.geometrySpline.vertices.length; x++) {
+        currentVert = _this.geometrySpline.vertices[x];
+        currentPoint = utils.mapPoint(nextSpot.lat, nextSpot.lon);
+
+        currentVert2 = _this.geometrySplineDotted.vertices[x];
+        currentPoint2 = utils.mapPoint(nextSpot2.lat, nextSpot2.lon);
+
+        if (x >= nextSpot.index) {
+          currentVert.set(
+            currentPoint.x * 1.2,
+            currentPoint.y * 1.2,
+            currentPoint.z * 1.2
+          );
+          currentVert2.set(
+            currentPoint2.x * 1.19,
+            currentPoint2.y * 1.19,
+            currentPoint2.z * 1.19
+          );
+        }
+        _this.geometrySpline.verticesNeedUpdate = true;
+        _this.geometrySplineDotted.verticesNeedUpdate = true;
+      }
+      if (pointList.length > 0) {
+        setTimeout(update, _this.opts.drawTime / _this.opts.lineSegments);
+      }
+    };
+
+    update();
+
+    this.scene.add(new THREE.Line(_this.geometrySpline, materialSpline));
+    this.scene.add(
+      new THREE.Line(
+        _this.geometrySplineDotted,
+        materialSplineDotted,
+        THREE.LinePieces
+      )
+    );
+  }
+
+  this.scene.add(this.marker);
+  this.scene.add(this.labelSprite);
 };
 
-Marker.prototype.remove = function(){
-    var x = 0;
-    var _this = this;
+Marker.prototype.remove = function () {
+  var x = 0;
+  var _this = this;
 
-    var update = function(ref){
-
-        for(var i = 0; i< x; i++){
-            ref.geometrySpline.vertices[i].set(ref.geometrySpline.vertices[i+1]);
-            ref.geometrySplineDotted.vertices[i].set(ref.geometrySplineDotted.vertices[i+1]);
-            ref.geometrySpline.verticesNeedUpdate = true;
-            ref.geometrySplineDotted.verticesNeedUpdate = true;
-        }
-
-        x++;
-        if(x < ref.geometrySpline.vertices.length){
-            setTimeout(function(){update(ref)}, _this.opts.drawTime/_this.opts.lineSegments)
-        } else {
-            _this.scene.remove(ref.geometrySpline);
-            _this.scene.remove(ref.geometrySplineDotted);
-        }
+  var update = function (ref) {
+    for (var i = 0; i < x; i++) {
+      ref.geometrySpline.vertices[i].set(ref.geometrySpline.vertices[i + 1]);
+      ref.geometrySplineDotted.vertices[i].set(
+        ref.geometrySplineDotted.vertices[i + 1]
+      );
+      ref.geometrySpline.verticesNeedUpdate = true;
+      ref.geometrySplineDotted.verticesNeedUpdate = true;
     }
 
-    for(var j = 0; j< _this.next.length; j++){
-        (function(k){
-            update(_this.next[k]);
-        })(j);
-    } 
+    x++;
+    if (x < ref.geometrySpline.vertices.length) {
+      setTimeout(function () {
+        update(ref);
+      }, _this.opts.drawTime / _this.opts.lineSegments);
+    } else {
+      _this.scene.remove(ref.geometrySpline);
+      _this.scene.remove(ref.geometrySplineDotted);
+    }
+  };
 
-    _this.scene.remove(_this.marker);
-    _this.scene.remove(_this.labelSprite);
+  for (var j = 0; j < _this.next.length; j++) {
+    (function (k) {
+      update(_this.next[k]);
+    })(j);
+  }
 
+  _this.scene.remove(_this.marker);
+  _this.scene.remove(_this.labelSprite);
 };
 
 module.exports = Marker;
 
 },{"./utils":21,"three":12,"tween.js":13}],17:[function(require,module,exports){
-var THREE = require('three'),
-    TWEEN = require('tween.js'),
-    utils = require('./utils');
+var THREE = require("three"),
+  TWEEN = require("tween.js"),
+  utils = require("./utils");
 
-
-var createTopCanvas = function(color) {
-    var markerWidth = 20,
+var createTopCanvas = function (color) {
+  var markerWidth = 20,
     markerHeight = 20;
 
-    return utils.renderToCanvas(markerWidth, markerHeight, function(ctx){
-        ctx.fillStyle=color;
-        ctx.beginPath();
-        ctx.arc(markerWidth/2, markerHeight/2, markerWidth/4, 0, 2* Math.PI);
-        ctx.fill();
-    });
-
+  return utils.renderToCanvas(markerWidth, markerHeight, function (ctx) {
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.arc(markerWidth / 2, markerHeight / 2, markerWidth / 4, 0, 2 * Math.PI);
+    ctx.fill();
+  });
 };
 
-var Pin = function(lat, lon, text, altitude, scene, smokeProvider, _opts){
+var Pin = function (lat, lon, text, altitude, scene, smokeProvider, _opts) {
+  /* options that can be passed in */
+  var opts = {
+    lineColor: "#8FD8D8",
+    lineWidth: 1,
+    topColor: "#8FD8D8",
+    smokeColor: "#FFF",
+    labelColor: "#FFF",
+    font: "Inconsolata",
+    showLabel: text.length > 0,
+    showTop: text.length > 0,
+    showSmoke: text.length > 0,
+  };
 
-    /* options that can be passed in */
-    var opts = {
-        lineColor: "#8FD8D8",
-        lineWidth: 1,
-        topColor: "#8FD8D8",
-        smokeColor: "#FFF",
-        labelColor: "#FFF",
-        font: "Inconsolata",
-        showLabel: (text.length > 0),
-        showTop: (text.length > 0),
-        showSmoke: (text.length > 0)
+  var lineMaterial,
+    labelCanvas,
+    labelTexture,
+    labelMaterial,
+    topTexture,
+    topMaterial,
+    point,
+    line;
+
+  this.lat = lat;
+  this.lon = lon;
+  this.text = text;
+  this.altitude = altitude;
+  this.scene = scene;
+  this.smokeProvider = smokeProvider;
+  this.dateCreated = Date.now();
+
+  if (_opts) {
+    for (var i in opts) {
+      if (_opts[i] != undefined) {
+        opts[i] = _opts[i];
+      }
     }
+  }
 
-    var lineMaterial,
-       labelCanvas,
-       labelTexture,
-       labelMaterial,
-       topTexture,
-       topMaterial,
-       point,
-       line;
+  this.opts = opts;
 
-    this.lat = lat;
-    this.lon = lon;
-    this.text = text;
-    this.altitude = altitude;
-    this.scene = scene;
-    this.smokeProvider = smokeProvider;
-    this.dateCreated = Date.now();
+  this.topVisible = opts.showTop;
+  this.smokeVisible = opts.showSmoke;
+  this.labelVisible = opts.showLabel;
 
-    if(_opts){
-        for(var i in opts){
-            if(_opts[i] != undefined){
-                opts[i] = _opts[i];
-            }
+  /* the line */
+
+  this.lineGeometry = new THREE.Geometry();
+  lineMaterial = new THREE.LineBasicMaterial({
+    color: opts.lineColor,
+    linewidth: opts.lineWidth,
+  });
+
+  point = utils.mapPoint(lat, lon);
+
+  this.lineGeometry.vertices.push(new THREE.Vector3(point.x, point.y, point.z));
+  this.lineGeometry.vertices.push(new THREE.Vector3(point.x, point.y, point.z));
+  this.line = new THREE.Line(this.lineGeometry, lineMaterial);
+
+  /* the label */
+
+  labelCanvas = utils.createLabel(text, 18, opts.labelColor, opts.font);
+  labelTexture = new THREE.Texture(labelCanvas);
+  labelTexture.needsUpdate = true;
+
+  labelMaterial = new THREE.SpriteMaterial({
+    map: labelTexture,
+    useScreenCoordinates: false,
+    opacity: 0,
+    depthTest: true,
+    fog: true,
+  });
+
+  this.labelSprite = new THREE.Sprite(labelMaterial);
+  this.labelSprite.position = {
+    x: point.x * altitude * 1.1,
+    y: point.y * altitude + (point.y < 0 ? -15 : 30),
+    z: point.z * altitude * 1.1,
+  };
+  this.labelSprite.scale.set(labelCanvas.width, labelCanvas.height);
+
+  /* the top */
+
+  topTexture = new THREE.Texture(createTopCanvas(opts.topColor));
+  topTexture.needsUpdate = true;
+  topMaterial = new THREE.SpriteMaterial({
+    map: topTexture,
+    depthTest: true,
+    fog: true,
+    opacity: 0,
+  });
+  this.topSprite = new THREE.Sprite(topMaterial);
+  this.topSprite.scale.set(20, 20);
+  this.topSprite.position.set(
+    point.x * altitude,
+    point.y * altitude,
+    point.z * altitude
+  );
+
+  /* the smoke */
+  if (this.smokeVisible) {
+    this.smokeId = smokeProvider.setFire(lat, lon, altitude);
+  }
+
+  var _this = this; //arghhh
+
+  /* intro animations */
+
+  if (opts.showTop || opts.showLabel) {
+    new TWEEN.Tween({ opacity: 0 })
+      .to({ opacity: 1 }, 500)
+      .onUpdate(function () {
+        if (_this.topVisible) {
+          topMaterial.opacity = this.opacity;
+        } else {
+          topMaterial.opacity = 0;
         }
-    }
+        if (_this.labelVisible) {
+          labelMaterial.opacity = this.opacity;
+        } else {
+          labelMaterial.opacity = 0;
+        }
+      })
+      .delay(1000)
+      .start();
+  }
 
-    this.opts = opts;
+  new TWEEN.Tween(point)
+    .to(
+      { x: point.x * altitude, y: point.y * altitude, z: point.z * altitude },
+      1500
+    )
+    .easing(TWEEN.Easing.Elastic.Out)
+    .onUpdate(function () {
+      _this.lineGeometry.vertices[1].x = this.x;
+      _this.lineGeometry.vertices[1].y = this.y;
+      _this.lineGeometry.vertices[1].z = this.z;
+      _this.lineGeometry.verticesNeedUpdate = true;
+    })
+    .start();
 
-    this.topVisible = opts.showTop;
-    this.smokeVisible = opts.showSmoke;
-    this.labelVisible = opts.showLabel;
+  /* add to scene */
 
-    /* the line */
-
-    this.lineGeometry = new THREE.Geometry();
-    lineMaterial = new THREE.LineBasicMaterial({
-        color: opts.lineColor,
-        linewidth: opts.lineWidth
-    });
-
-    point = utils.mapPoint(lat,lon);
-
-    this.lineGeometry.vertices.push(new THREE.Vector3(point.x, point.y, point.z));
-    this.lineGeometry.vertices.push(new THREE.Vector3(point.x, point.y, point.z));
-    this.line = new THREE.Line(this.lineGeometry, lineMaterial);
-
-    /* the label */
-
-    labelCanvas = utils.createLabel(text, 18, opts.labelColor, opts.font);
-    labelTexture = new THREE.Texture(labelCanvas);
-    labelTexture.needsUpdate = true;
-
-    labelMaterial = new THREE.SpriteMaterial({
-       map : labelTexture,
-       useScreenCoordinates: false,
-       opacity:0,
-       depthTest: true,
-       fog: true
-    });
-
-   this.labelSprite = new THREE.Sprite(labelMaterial);
-   this.labelSprite.position = {x: point.x*altitude*1.1, y: point.y*altitude + (point.y < 0 ? -15 : 30), z: point.z*altitude*1.1};
-   this.labelSprite.scale.set(labelCanvas.width, labelCanvas.height);
-
-   /* the top */
-
-   topTexture = new THREE.Texture(createTopCanvas(opts.topColor));
-   topTexture.needsUpdate = true;
-   topMaterial = new THREE.SpriteMaterial({map: topTexture, depthTest: true, fog: true, opacity: 0});
-   this.topSprite = new THREE.Sprite(topMaterial);
-   this.topSprite.scale.set(20, 20);
-   this.topSprite.position.set(point.x * altitude, point.y * altitude, point.z * altitude);
-
-   /* the smoke */
-   if(this.smokeVisible){
-       this.smokeId = smokeProvider.setFire(lat, lon, altitude);
-   }
-
-   var _this = this; //arghhh
-
-   /* intro animations */
-
-   if(opts.showTop || opts.showLabel){
-       new TWEEN.Tween( {opacity: 0})
-           .to( {opacity: 1}, 500 )
-           .onUpdate(function(){
-               if(_this.topVisible){
-                   topMaterial.opacity = this.opacity;
-               } else {
-                   topMaterial.opacity = 0;
-               }
-               if(_this.labelVisible){
-                   labelMaterial.opacity = this.opacity;
-               } else {
-                   labelMaterial.opacity = 0;
-               }
-           }).delay(1000)
-           .start();
-   }
-
-
-   new TWEEN.Tween(point)
-   .to( {x: point.x*altitude, y: point.y*altitude, z: point.z*altitude}, 1500 )
-   .easing( TWEEN.Easing.Elastic.Out )
-   .onUpdate(function(){
-       _this.lineGeometry.vertices[1].x = this.x;
-       _this.lineGeometry.vertices[1].y = this.y;
-       _this.lineGeometry.vertices[1].z = this.z;
-       _this.lineGeometry.verticesNeedUpdate = true;
-   }).start();
-
-    /* add to scene */
-
-    this.scene.add(this.labelSprite);
-    this.scene.add(this.line);
-    this.scene.add(this.topSprite);
-
+  this.scene.add(this.labelSprite);
+  this.scene.add(this.line);
+  this.scene.add(this.topSprite);
 };
 
-Pin.prototype.toString = function(){
-    return "" + this.lat + "_" + this.lon;
-}
-
-Pin.prototype.changeAltitude = function(altitude){
-    var point = utils.mapPoint(this.lat, this.lon);
-    var _this = this; // arghhhh
-
-   new TWEEN.Tween({altitude: this.altitude})
-   .to( {altitude: altitude}, 1500 )
-   .easing( TWEEN.Easing.Elastic.Out )
-   .onUpdate(function(){
-       if(_this.smokeVisible){
-           _this.smokeProvider.changeAltitude(this.altitude, _this.smokeId);
-       }
-       if(_this.topVisible){
-           _this.topSprite.position.set(point.x * this.altitude, point.y * this.altitude, point.z * this.altitude);
-       }
-       if(_this.labelVisible){
-           _this.labelSprite.position = {x: point.x*this.altitude*1.1, y: point.y*this.altitude + (point.y < 0 ? -15 : 30), z: point.z*this.altitude*1.1};
-       }
-       _this.lineGeometry.vertices[1].x = point.x * this.altitude;
-       _this.lineGeometry.vertices[1].y = point.y * this.altitude;
-       _this.lineGeometry.vertices[1].z = point.z * this.altitude;
-       _this.lineGeometry.verticesNeedUpdate = true;
-
-   })
-   .onComplete(function(){
-       _this.altitude = altitude;
-       
-   }).start();
-
+Pin.prototype.toString = function () {
+  return "" + this.lat + "_" + this.lon;
 };
 
-Pin.prototype.hideTop = function(){
-    if(this.topVisible){
-        this.topSprite.material.opacity = 0.0;
-        this.topVisible = false;
-    }
+Pin.prototype.changeAltitude = function (altitude) {
+  var point = utils.mapPoint(this.lat, this.lon);
+  var _this = this; // arghhhh
+
+  new TWEEN.Tween({ altitude: this.altitude })
+    .to({ altitude: altitude }, 1500)
+    .easing(TWEEN.Easing.Elastic.Out)
+    .onUpdate(function () {
+      if (_this.smokeVisible) {
+        _this.smokeProvider.changeAltitude(this.altitude, _this.smokeId);
+      }
+      if (_this.topVisible) {
+        _this.topSprite.position.set(
+          point.x * this.altitude,
+          point.y * this.altitude,
+          point.z * this.altitude
+        );
+      }
+      if (_this.labelVisible) {
+        _this.labelSprite.position = {
+          x: point.x * this.altitude * 1.1,
+          y: point.y * this.altitude + (point.y < 0 ? -15 : 30),
+          z: point.z * this.altitude * 1.1,
+        };
+      }
+      _this.lineGeometry.vertices[1].x = point.x * this.altitude;
+      _this.lineGeometry.vertices[1].y = point.y * this.altitude;
+      _this.lineGeometry.vertices[1].z = point.z * this.altitude;
+      _this.lineGeometry.verticesNeedUpdate = true;
+    })
+    .onComplete(function () {
+      _this.altitude = altitude;
+    })
+    .start();
 };
 
-Pin.prototype.showTop = function(){
-    if(!this.topVisible){
-        this.topSprite.material.opacity = 1.0;
-        this.topVisible = true;
-    }
+Pin.prototype.hideTop = function () {
+  if (this.topVisible) {
+    this.topSprite.material.opacity = 0.0;
+    this.topVisible = false;
+  }
 };
 
-Pin.prototype.hideLabel = function(){
-    if(this.labelVisible){
-        this.labelSprite.material.opacity = 0.0;
-        this.labelVisible = false;
-    }
+Pin.prototype.showTop = function () {
+  if (!this.topVisible) {
+    this.topSprite.material.opacity = 1.0;
+    this.topVisible = true;
+  }
 };
 
-Pin.prototype.showLabel = function(){
-    if(!this.labelVisible){
-        this.labelSprite.material.opacity = 1.0;
-        this.labelVisible = true;
-    }
+Pin.prototype.hideLabel = function () {
+  if (this.labelVisible) {
+    this.labelSprite.material.opacity = 0.0;
+    this.labelVisible = false;
+  }
 };
 
-Pin.prototype.hideSmoke = function(){
-    if(this.smokeVisible){
-        this.smokeProvider.extinguish(this.smokeId);
-        this.smokeVisible = false;
-    }
+Pin.prototype.showLabel = function () {
+  if (!this.labelVisible) {
+    this.labelSprite.material.opacity = 1.0;
+    this.labelVisible = true;
+  }
 };
 
-Pin.prototype.showSmoke = function(){
-    if(!this.smokeVisible){
-        this.smokeId  = this.smokeProvider.setFire(this.lat, this.lon, this.altitude);
-        this.smokeVisible = true;
-    }
+Pin.prototype.hideSmoke = function () {
+  if (this.smokeVisible) {
+    this.smokeProvider.extinguish(this.smokeId);
+    this.smokeVisible = false;
+  }
 };
 
-Pin.prototype.age = function(){
-    return Date.now() - this.dateCreated;
-
+Pin.prototype.showSmoke = function () {
+  if (!this.smokeVisible) {
+    this.smokeId = this.smokeProvider.setFire(
+      this.lat,
+      this.lon,
+      this.altitude
+    );
+    this.smokeVisible = true;
+  }
 };
 
-Pin.prototype.remove = function(){
-    this.scene.remove(this.labelSprite);
-    this.scene.remove(this.line);
-    this.scene.remove(this.topSprite);
+Pin.prototype.age = function () {
+  return Date.now() - this.dateCreated;
+};
 
-    if(this.smokeVisible){
-        this.smokeProvider.extinguish(this.smokeId);
-    }
+Pin.prototype.remove = function () {
+  this.scene.remove(this.labelSprite);
+  this.scene.remove(this.line);
+  this.scene.remove(this.topSprite);
+
+  if (this.smokeVisible) {
+    this.smokeProvider.extinguish(this.smokeId);
+  }
 };
 
 module.exports = Pin;
 
-
 },{"./utils":21,"three":12,"tween.js":13}],18:[function(require,module,exports){
-var TextureAnimator = require('./TextureAnimator'),
-    THREE = require('three'),
-    utils = require('./utils');
+var TextureAnimator = require("./TextureAnimator"),
+  THREE = require("three"),
+  utils = require("./utils");
 
+var createCanvas = function (
+  numFrames,
+  pixels,
+  rows,
+  waveStart,
+  numWaves,
+  waveColor,
+  coreColor,
+  shieldColor
+) {
+  var cols = numFrames / rows;
+  var waveInterval = Math.floor((numFrames - waveStart) / numWaves);
+  var waveDist = pixels - 25; // width - center of satellite
+  var distPerFrame = waveDist / (numFrames - waveStart);
+  var offsetx = 0;
+  var offsety = 0;
+  var curRow = 0;
 
-var createCanvas = function(numFrames, pixels, rows, waveStart, numWaves, waveColor, coreColor, shieldColor) {
+  var waveColorRGB = utils.hexToRgb(waveColor);
 
-    var cols = numFrames / rows;
-    var waveInterval = Math.floor((numFrames-waveStart)/numWaves);
-    var waveDist = pixels - 25; // width - center of satellite
-    var distPerFrame = waveDist / (numFrames-waveStart)
-    var offsetx = 0;
-    var offsety = 0;
-    var curRow = 0;
-
-    var waveColorRGB = utils.hexToRgb(waveColor);
-
-    return utils.renderToCanvas(numFrames * pixels / rows, pixels * rows, function(ctx){
-
-        for(var i = 0; i< numFrames; i++){
-            if(i - curRow * cols >= cols){
-                offsetx = 0;
-                offsety += pixels;
-                curRow++;
-            }
-
-            var centerx = offsetx + 25;
-            var centery = offsety + Math.floor(pixels/2);
-
-            /* circle around core */
-            // i have between 0 and wavestart to fade in
-            // i have between wavestart and  waveend - (time between waves*2) 
-            // to do a full spin close and then back open
-            // i have between waveend-2*(timebetween waves)/2 and waveend to rotate Math.PI/4 degrees
-            // this is probably the ugliest code in all of here -- basically I just messed arund with stuff until it looked ok
-
-            ctx.lineWidth=2;
-            ctx.strokeStyle=shieldColor;
-            var buffer=Math.PI/16;
-            var start = -Math.PI + Math.PI/4;
-            var radius = 8;
-            var repeatAt = Math.floor(numFrames-2*(numFrames-waveStart)/numWaves)+1;
-
-            /* fade in and out */
-            if(i<waveStart){
-                radius = radius*i/waveStart;
-            }
-
-            var swirlDone = Math.floor((repeatAt-waveStart) / 2) + waveStart;
-
-            for(var n = 0; n < 4; n++){
-                ctx.beginPath();
-
-                if(i < waveStart || i>=numFrames){
-
-                    ctx.arc(centerx, centery, radius,n* Math.PI/2 + start+buffer, n*Math.PI/2 + start+Math.PI/2-2*buffer);
-
-                } else if(i > waveStart && i < swirlDone){
-                    var totalTimeToComplete = swirlDone - waveStart;
-                    var distToGo = 3*Math.PI/2;
-                    var currentStep = (i-waveStart);
-                    var movementPerStep = distToGo / totalTimeToComplete;
-
-                    var startAngle = -Math.PI + Math.PI/4 + buffer + movementPerStep*currentStep;
-
-                    ctx.arc(centerx, centery, radius,Math.max(n*Math.PI/2 + start,startAngle), Math.max(n*Math.PI/2 + start + Math.PI/2 - 2*buffer, startAngle +Math.PI/2 - 2*buffer));
-
-                } else if(i >= swirlDone && i< repeatAt){
-                    var totalTimeToComplete = repeatAt - swirlDone;
-                    var distToGo = n*2*Math.PI/4;
-                    var currentStep = (i-swirlDone);
-                    var movementPerStep = distToGo / totalTimeToComplete;
-
-
-                    var startAngle = Math.PI/2 + Math.PI/4 + buffer + movementPerStep*currentStep;
-                    ctx.arc(centerx, centery, radius,startAngle, startAngle + Math.PI/2 - 2*buffer);
-
-                } else if(i >= repeatAt && i < (numFrames-repeatAt)/2 + repeatAt){
-
-                    var totalTimeToComplete = (numFrames-repeatAt)/2;
-                    var distToGo = Math.PI/2;
-                    var currentStep = (i-repeatAt);
-                    var movementPerStep = distToGo / totalTimeToComplete;
-                    var startAngle = n*(Math.PI/2)+ Math.PI/4 + buffer + movementPerStep*currentStep;
-
-                    ctx.arc(centerx, centery, radius,startAngle, startAngle + Math.PI/2 - 2*buffer);
-
-                } else{
-                    ctx.arc(centerx, centery, radius,n* Math.PI/2 + start+buffer, n*Math.PI/2 + start+Math.PI/2-2*buffer);
-                }
-                ctx.stroke();
-            }
-
-            // frame i'm on * distance per frame
-
-            /* waves going out */
-            var frameOn;
-
-            for(var wi = 0; wi<numWaves; wi++){
-                frameOn = i-(waveInterval*wi)-waveStart;
-                if(frameOn > 0 && frameOn * distPerFrame < pixels - 25){
-                    ctx.strokeStyle="rgba(" + waveColorRGB.r + "," + waveColorRGB.g + "," + waveColorRGB.b + "," + (.9-frameOn*distPerFrame/(pixels-25)) + ")";
-                    ctx.lineWidth=2;
-                    ctx.beginPath();
-                    ctx.arc(centerx, centery, frameOn * distPerFrame, -Math.PI/12, Math.PI/12);
-                    ctx.stroke();
-                }
-            }
-            /* red circle in middle */
-
-            ctx.fillStyle="#000";
-            ctx.beginPath();
-            ctx.arc(centerx,centery,3,0,2*Math.PI);
-            ctx.fill();
-
-            ctx.strokeStyle=coreColor;
-            ctx.lineWidth=2;
-            ctx.beginPath();
-            if(i<waveStart){
-                ctx.arc(centerx,centery,3*i/waveStart,0,2*Math.PI);
-            } else {
-                ctx.arc(centerx,centery,3,0,2*Math.PI);
-            }
-            ctx.stroke();
-
-            offsetx += pixels;
+  return utils.renderToCanvas(
+    (numFrames * pixels) / rows,
+    pixels * rows,
+    function (ctx) {
+      for (var i = 0; i < numFrames; i++) {
+        if (i - curRow * cols >= cols) {
+          offsetx = 0;
+          offsety += pixels;
+          curRow++;
         }
 
-    });
+        var centerx = offsetx + 25;
+        var centery = offsety + Math.floor(pixels / 2);
 
+        /* circle around core */
+        // i have between 0 and wavestart to fade in
+        // i have between wavestart and  waveend - (time between waves*2)
+        // to do a full spin close and then back open
+        // i have between waveend-2*(timebetween waves)/2 and waveend to rotate Math.PI/4 degrees
+        // this is probably the ugliest code in all of here -- basically I just messed arund with stuff until it looked ok
+
+        ctx.lineWidth = 2;
+        ctx.strokeStyle = shieldColor;
+        var buffer = Math.PI / 16;
+        var start = -Math.PI + Math.PI / 4;
+        var radius = 8;
+        var repeatAt =
+          Math.floor(numFrames - (2 * (numFrames - waveStart)) / numWaves) + 1;
+
+        /* fade in and out */
+        if (i < waveStart) {
+          radius = (radius * i) / waveStart;
+        }
+
+        var swirlDone = Math.floor((repeatAt - waveStart) / 2) + waveStart;
+
+        for (var n = 0; n < 4; n++) {
+          ctx.beginPath();
+
+          if (i < waveStart || i >= numFrames) {
+            ctx.arc(
+              centerx,
+              centery,
+              radius,
+              (n * Math.PI) / 2 + start + buffer,
+              (n * Math.PI) / 2 + start + Math.PI / 2 - 2 * buffer
+            );
+          } else if (i > waveStart && i < swirlDone) {
+            var totalTimeToComplete = swirlDone - waveStart;
+            var distToGo = (3 * Math.PI) / 2;
+            var currentStep = i - waveStart;
+            var movementPerStep = distToGo / totalTimeToComplete;
+
+            var startAngle =
+              -Math.PI + Math.PI / 4 + buffer + movementPerStep * currentStep;
+
+            ctx.arc(
+              centerx,
+              centery,
+              radius,
+              Math.max((n * Math.PI) / 2 + start, startAngle),
+              Math.max(
+                (n * Math.PI) / 2 + start + Math.PI / 2 - 2 * buffer,
+                startAngle + Math.PI / 2 - 2 * buffer
+              )
+            );
+          } else if (i >= swirlDone && i < repeatAt) {
+            var totalTimeToComplete = repeatAt - swirlDone;
+            var distToGo = (n * 2 * Math.PI) / 4;
+            var currentStep = i - swirlDone;
+            var movementPerStep = distToGo / totalTimeToComplete;
+
+            var startAngle =
+              Math.PI / 2 +
+              Math.PI / 4 +
+              buffer +
+              movementPerStep * currentStep;
+            ctx.arc(
+              centerx,
+              centery,
+              radius,
+              startAngle,
+              startAngle + Math.PI / 2 - 2 * buffer
+            );
+          } else if (
+            i >= repeatAt &&
+            i < (numFrames - repeatAt) / 2 + repeatAt
+          ) {
+            var totalTimeToComplete = (numFrames - repeatAt) / 2;
+            var distToGo = Math.PI / 2;
+            var currentStep = i - repeatAt;
+            var movementPerStep = distToGo / totalTimeToComplete;
+            var startAngle =
+              n * (Math.PI / 2) +
+              Math.PI / 4 +
+              buffer +
+              movementPerStep * currentStep;
+
+            ctx.arc(
+              centerx,
+              centery,
+              radius,
+              startAngle,
+              startAngle + Math.PI / 2 - 2 * buffer
+            );
+          } else {
+            ctx.arc(
+              centerx,
+              centery,
+              radius,
+              (n * Math.PI) / 2 + start + buffer,
+              (n * Math.PI) / 2 + start + Math.PI / 2 - 2 * buffer
+            );
+          }
+          ctx.stroke();
+        }
+
+        // frame i'm on * distance per frame
+
+        /* waves going out */
+        var frameOn;
+
+        for (var wi = 0; wi < numWaves; wi++) {
+          frameOn = i - waveInterval * wi - waveStart;
+          if (frameOn > 0 && frameOn * distPerFrame < pixels - 25) {
+            ctx.strokeStyle =
+              "rgba(" +
+              waveColorRGB.r +
+              "," +
+              waveColorRGB.g +
+              "," +
+              waveColorRGB.b +
+              "," +
+              (0.9 - (frameOn * distPerFrame) / (pixels - 25)) +
+              ")";
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.arc(
+              centerx,
+              centery,
+              frameOn * distPerFrame,
+              -Math.PI / 12,
+              Math.PI / 12
+            );
+            ctx.stroke();
+          }
+        }
+        /* red circle in middle */
+
+        ctx.fillStyle = "#000";
+        ctx.beginPath();
+        ctx.arc(centerx, centery, 3, 0, 2 * Math.PI);
+        ctx.fill();
+
+        ctx.strokeStyle = coreColor;
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        if (i < waveStart) {
+          ctx.arc(centerx, centery, (3 * i) / waveStart, 0, 2 * Math.PI);
+        } else {
+          ctx.arc(centerx, centery, 3, 0, 2 * Math.PI);
+        }
+        ctx.stroke();
+
+        offsetx += pixels;
+      }
+    }
+  );
 };
 
-var Satellite = function(lat, lon, altitude, scene, _opts, canvas, texture){
-
-    var geometry, 
+var Satellite = function (lat, lon, altitude, scene, _opts, canvas, texture) {
+  var geometry,
     point = utils.mapPoint(lat, lon),
     opts,
     numFrames,
@@ -45579,280 +45812,356 @@ var Satellite = function(lat, lon, altitude, scene, _opts, canvas, texture){
     waveStart,
     repeatAt;
 
-    point.x *= altitude;
-    point.y *= altitude;
-    point.z *= altitude;
+  point.x *= altitude;
+  point.y *= altitude;
+  point.z *= altitude;
 
-    /* options that can be passed in */
-    var opts = {
-        numWaves: 8,
-        waveColor: "#FFF",
-        coreColor: "#FF0000",
-        shieldColor: "#FFF",
-        size: 1
+  /* options that can be passed in */
+  var opts = {
+    numWaves: 8,
+    waveColor: "#FFF",
+    coreColor: "#FF0000",
+    shieldColor: "#FFF",
+    size: 1,
+  };
+
+  /* required field */
+  this.lat = lat;
+  this.lon = lon;
+  this.altitude = altitude;
+  this.scene = scene;
+
+  this.onRemoveList = [];
+
+  /* private vars */
+  numFrames = 50;
+  pixels = 100;
+  rows = 10;
+  waveStart = Math.floor(numFrames / 8);
+
+  if (_opts) {
+    for (var i in opts) {
+      if (_opts[i] != undefined) {
+        opts[i] = _opts[i];
+      }
     }
+  }
 
-    /* required field */
-    this.lat = lat;
-    this.lon = lon;
-    this.altitude = altitude;
-    this.scene = scene;
+  this.opts = opts;
 
-    this.onRemoveList = [];
-
-    /* private vars */
-    numFrames = 50;
-    pixels = 100;
-    rows = 10;
-    waveStart = Math.floor(numFrames/8);
-
-    if(_opts){
-        for(var i in opts){
-            if(_opts[i] != undefined){
-                opts[i] = _opts[i];
-            }
-        }
-    }
-
-    this.opts = opts;
-
-    if(!canvas){
-        this.canvas = createCanvas(numFrames, pixels, rows, waveStart, opts.numWaves, opts.waveColor, opts.coreColor, opts.shieldColor);
-        this.texture = new THREE.Texture(this.canvas)
-        this.texture.needsUpdate = true;
-        repeatAt = Math.floor(numFrames-2*(numFrames-waveStart)/opts.numWaves)+1;
-        this.animator = new TextureAnimator(this.texture,rows, numFrames/rows, numFrames, 80, repeatAt); 
-    } else {
-        this.canvas = canvas;
-        if(!texture){
-            this.texture = new THREE.Texture(this.canvas)
-            this.texture.needsUpdate = true;
-            repeatAt = Math.floor(numFrames-2*(numFrames-waveStart)/opts.numWaves)+1;
-            this.animator = new TextureAnimator(this.texture,rows, numFrames/rows, numFrames, 80, repeatAt); 
-        } else {
-            this.texture = texture;
-        }
-    }
-
-    geometry = new THREE.PlaneGeometry(opts.size * 150, opts.size * 150,1,1);
-    this.material = new THREE.MeshBasicMaterial({
-        map : this.texture,
-        depthTest: false,
-        transparent: true
-    });
-
-    this.mesh = new THREE.Mesh(geometry, this.material);
-    this.mesh.tiltMultiplier = Math.PI/2 * (1 - Math.abs(lat / 90));
-    this.mesh.tiltDirection = (lat > 0 ? -1 : 1);
-    this.mesh.lon = lon;
-
-    this.mesh.position.set(point.x, point.y, point.z);
-
-    this.mesh.rotation.z = -1*(lat/90)* Math.PI/2;
-    this.mesh.rotation.y = (lon/180)* Math.PI
-
-    scene.add(this.mesh);
-
-}
-
-Satellite.prototype.changeAltitude = function(_altitude){
-    
-    var newPoint = utils.mapPoint(this.lat, this.lon);
-    newPoint.x *= _altitude;
-    newPoint.y *= _altitude;
-    newPoint.z *= _altitude;
-
-    this.altitude = _altitude;
-
-    this.mesh.position.set(newPoint.x, newPoint.y, newPoint.z);
-
-};
-
-Satellite.prototype.changeCanvas = function(numWaves, waveColor, coreColor, shieldColor){
-    /* private vars */
-    numFrames = 50;
-    pixels = 100;
-    rows = 10;
-    waveStart = Math.floor(numFrames/8);
-
-    if(!numWaves){
-        numWaves = this.opts.numWaves;
-    } else {
-        this.opts.numWaves = numWaves;
-    }
-    if(!waveColor){
-        waveColor = this.opts.waveColor;
-    } else {
-        this.opts.waveColor = waveColor;
-    }
-    if(!coreColor){
-        coreColor = this.opts.coreColor;
-    } else {
-        this.opts.coreColor = coreColor;
-    }
-    if(!shieldColor){
-        shieldColor = this.opts.shieldColor;
-    } else {
-        this.opts.shieldColor = shieldColor;
-    }
-
-    this.canvas = createCanvas(numFrames, pixels, rows, waveStart, numWaves, waveColor, coreColor, shieldColor);
-    this.texture = new THREE.Texture(this.canvas)
+  if (!canvas) {
+    this.canvas = createCanvas(
+      numFrames,
+      pixels,
+      rows,
+      waveStart,
+      opts.numWaves,
+      opts.waveColor,
+      opts.coreColor,
+      opts.shieldColor
+    );
+    this.texture = new THREE.Texture(this.canvas);
     this.texture.needsUpdate = true;
-    repeatAt = Math.floor(numFrames-2*(numFrames-waveStart)/numWaves)+1;
-    this.animator = new TextureAnimator(this.texture,rows, numFrames/rows, numFrames, 80, repeatAt); 
-    this.material.map = this.texture;
-};
-
-Satellite.prototype.tick = function(cameraPosition, cameraAngle, renderTime) {
-    // underscore should be good enough
-
-    this.mesh.lookAt(cameraPosition);
-
-    this.mesh.rotateZ(this.mesh.tiltDirection * Math.PI/2);
-    this.mesh.rotateZ(Math.sin(cameraAngle + (this.mesh.lon / 180) * Math.PI) * this.mesh.tiltMultiplier * this.mesh.tiltDirection * -1);
-
-    if(this.animator){
-        this.animator.update(renderTime);
+    repeatAt =
+      Math.floor(numFrames - (2 * (numFrames - waveStart)) / opts.numWaves) + 1;
+    this.animator = new TextureAnimator(
+      this.texture,
+      rows,
+      numFrames / rows,
+      numFrames,
+      80,
+      repeatAt
+    );
+  } else {
+    this.canvas = canvas;
+    if (!texture) {
+      this.texture = new THREE.Texture(this.canvas);
+      this.texture.needsUpdate = true;
+      repeatAt =
+        Math.floor(numFrames - (2 * (numFrames - waveStart)) / opts.numWaves) +
+        1;
+      this.animator = new TextureAnimator(
+        this.texture,
+        rows,
+        numFrames / rows,
+        numFrames,
+        80,
+        repeatAt
+      );
+    } else {
+      this.texture = texture;
     }
+  }
 
+  geometry = new THREE.PlaneGeometry(opts.size * 150, opts.size * 150, 1, 1);
+  this.material = new THREE.MeshBasicMaterial({
+    map: this.texture,
+    depthTest: false,
+    transparent: true,
+  });
 
+  this.mesh = new THREE.Mesh(geometry, this.material);
+  this.mesh.tiltMultiplier = (Math.PI / 2) * (1 - Math.abs(lat / 90));
+  this.mesh.tiltDirection = lat > 0 ? -1 : 1;
+  this.mesh.lon = lon;
+
+  this.mesh.position.set(point.x, point.y, point.z);
+
+  this.mesh.rotation.z = (-1 * (lat / 90) * Math.PI) / 2;
+  this.mesh.rotation.y = (lon / 180) * Math.PI;
+
+  scene.add(this.mesh);
 };
 
-Satellite.prototype.remove = function() {
+Satellite.prototype.changeAltitude = function (_altitude) {
+  var newPoint = utils.mapPoint(this.lat, this.lon);
+  newPoint.x *= _altitude;
+  newPoint.y *= _altitude;
+  newPoint.z *= _altitude;
 
+  this.altitude = _altitude;
 
-    this.scene.remove(this.mesh);
-
-    for(var i = 0; i< this.onRemoveList.length; i++){
-        this.onRemoveList[i]();
-    }
+  this.mesh.position.set(newPoint.x, newPoint.y, newPoint.z);
 };
 
-Satellite.prototype.onRemove = function(fn){
-    this.onRemoveList.push(fn);
-}
+Satellite.prototype.changeCanvas = function (
+  numWaves,
+  waveColor,
+  coreColor,
+  shieldColor
+) {
+  /* private vars */
+  numFrames = 50;
+  pixels = 100;
+  rows = 10;
+  waveStart = Math.floor(numFrames / 8);
 
-Satellite.prototype.toString = function(){
-    return "" + this.lat + '_' + this.lon + '_' + this.altitude;
+  if (!numWaves) {
+    numWaves = this.opts.numWaves;
+  } else {
+    this.opts.numWaves = numWaves;
+  }
+  if (!waveColor) {
+    waveColor = this.opts.waveColor;
+  } else {
+    this.opts.waveColor = waveColor;
+  }
+  if (!coreColor) {
+    coreColor = this.opts.coreColor;
+  } else {
+    this.opts.coreColor = coreColor;
+  }
+  if (!shieldColor) {
+    shieldColor = this.opts.shieldColor;
+  } else {
+    this.opts.shieldColor = shieldColor;
+  }
+
+  this.canvas = createCanvas(
+    numFrames,
+    pixels,
+    rows,
+    waveStart,
+    numWaves,
+    waveColor,
+    coreColor,
+    shieldColor
+  );
+  this.texture = new THREE.Texture(this.canvas);
+  this.texture.needsUpdate = true;
+  repeatAt =
+    Math.floor(numFrames - (2 * (numFrames - waveStart)) / numWaves) + 1;
+  this.animator = new TextureAnimator(
+    this.texture,
+    rows,
+    numFrames / rows,
+    numFrames,
+    80,
+    repeatAt
+  );
+  this.material.map = this.texture;
+};
+
+Satellite.prototype.tick = function (cameraPosition, cameraAngle, renderTime) {
+  // underscore should be good enough
+
+  this.mesh.lookAt(cameraPosition);
+
+  this.mesh.rotateZ((this.mesh.tiltDirection * Math.PI) / 2);
+  this.mesh.rotateZ(
+    Math.sin(cameraAngle + (this.mesh.lon / 180) * Math.PI) *
+      this.mesh.tiltMultiplier *
+      this.mesh.tiltDirection *
+      -1
+  );
+
+  if (this.animator) {
+    this.animator.update(renderTime);
+  }
+};
+
+Satellite.prototype.remove = function () {
+  this.scene.remove(this.mesh);
+
+  for (var i = 0; i < this.onRemoveList.length; i++) {
+    this.onRemoveList[i]();
+  }
+};
+
+Satellite.prototype.onRemove = function (fn) {
+  this.onRemoveList.push(fn);
+};
+
+Satellite.prototype.toString = function () {
+  return "" + this.lat + "_" + this.lon + "_" + this.altitude;
 };
 
 module.exports = Satellite;
 
-
 },{"./TextureAnimator":20,"./utils":21,"three":12}],19:[function(require,module,exports){
-var THREE = require('three'),
-    utils = require('./utils');
+var THREE = require("three"),
+  utils = require("./utils");
 
 var vertexShader = [
-    "#define PI 3.141592653589793238462643",
-    "#define DISTANCE 500.0",
-    "attribute float myStartTime;",
-    "attribute float myStartLat;",
-    "attribute float myStartLon;",
-    "attribute float altitude;",
-    "attribute float active;",
-    "uniform float currentTime;",
-    "uniform vec3 color;",
-    "varying vec4 vColor;",
-    "",
-    "vec3 getPos(float lat, float lon)",
-    "{",
-    "   if (lon < -180.0){",
-    "      lon = lon + 360.0;",
-    "   }",
-    "   float phi = (90.0 - lat) * PI / 180.0;",
-    "   float theta = (180.0 - lon) * PI / 180.0;",
-    "   float x = DISTANCE * sin(phi) * cos(theta) * altitude;",
-    "   float y = DISTANCE * cos(phi) * altitude;",
-    "   float z = DISTANCE * sin(phi) * sin(theta) * altitude;",
-    "   return vec3(x, y, z);",
-    "}",
-    "",
-    "void main()",
-    "{",
-    "   float dt = currentTime - myStartTime;",
-    "   if (dt < 0.0){",
-    "      dt = 0.0;",
-    "   }",
-    "   if (dt > 0.0 && active > 0.0) {",
-    "      dt = mod(dt,1500.0);",
-    "   }",
-    "   float opacity = 1.0 - dt/ 1500.0;",
-    "   if (dt == 0.0 || active == 0.0){",
-    "      opacity = 0.0;",
-    "   }",
-    "   vec3 newPos = getPos(myStartLat, myStartLon - ( dt / 50.0));",
-    "   vColor = vec4( color, opacity );", //     set color associated to vertex; use later in fragment shader.
-    "   vec4 mvPosition = modelViewMatrix * vec4( newPos, 1.0 );",
-    "   gl_PointSize = 2.5 - (dt / 1500.0);",
-    "   gl_Position = projectionMatrix * mvPosition;",
-    "}"
+  "#define PI 3.141592653589793238462643",
+  "#define DISTANCE 500.0",
+  "attribute float myStartTime;",
+  "attribute float myStartLat;",
+  "attribute float myStartLon;",
+  "attribute float altitude;",
+  "attribute float active;",
+  "uniform float currentTime;",
+  "uniform vec3 color;",
+  "varying vec4 vColor;",
+  "",
+  "vec3 getPos(float lat, float lon)",
+  "{",
+  "   if (lon < -180.0){",
+  "      lon = lon + 360.0;",
+  "   }",
+  "   float phi = (90.0 - lat) * PI / 180.0;",
+  "   float theta = (180.0 - lon) * PI / 180.0;",
+  "   float x = DISTANCE * sin(phi) * cos(theta) * altitude;",
+  "   float y = DISTANCE * cos(phi) * altitude;",
+  "   float z = DISTANCE * sin(phi) * sin(theta) * altitude;",
+  "   return vec3(x, y, z);",
+  "}",
+  "",
+  "void main()",
+  "{",
+  "   float dt = currentTime - myStartTime;",
+  "   if (dt < 0.0){",
+  "      dt = 0.0;",
+  "   }",
+  "   if (dt > 0.0 && active > 0.0) {",
+  "      dt = mod(dt,1500.0);",
+  "   }",
+  "   float opacity = 1.0 - dt/ 1500.0;",
+  "   if (dt == 0.0 || active == 0.0){",
+  "      opacity = 0.0;",
+  "   }",
+  "   vec3 newPos = getPos(myStartLat, myStartLon - ( dt / 50.0));",
+  "   vColor = vec4( color, opacity );", //     set color associated to vertex; use later in fragment shader.
+  "   vec4 mvPosition = modelViewMatrix * vec4( newPos, 1.0 );",
+  "   gl_PointSize = 2.5 - (dt / 1500.0);",
+  "   gl_Position = projectionMatrix * mvPosition;",
+  "}",
 ].join("\n");
 
 var fragmentShader = [
-    "varying vec4 vColor;",     
-    "void main()", 
-    "{",
-    "   gl_FragColor = vColor;", 
-    "   float depth = gl_FragCoord.z / gl_FragCoord.w;",
-    "   float fogFactor = smoothstep(1500.0, 1800.0, depth );",
-    "   vec3 fogColor = vec3(0.0);",
-    "   gl_FragColor = mix( vColor, vec4( fogColor, gl_FragColor.w), fogFactor );",
+  "varying vec4 vColor;",
+  "void main()",
+  "{",
+  "   gl_FragColor = vColor;",
+  "   float depth = gl_FragCoord.z / gl_FragCoord.w;",
+  "   float fogFactor = smoothstep(1500.0, 1800.0, depth );",
+  "   vec3 fogColor = vec3(0.0);",
+  "   gl_FragColor = mix( vColor, vec4( fogColor, gl_FragColor.w), fogFactor );",
 
-    "}"
+  "}",
 ].join("\n");
 
-var SmokeProvider = function(scene, _opts){
+var SmokeProvider = function (scene, _opts) {
+  /* options that can be passed in */
+  var opts = {
+    smokeCount: 5000,
+    smokePerPin: 30,
+    smokePerSecond: 20,
+  };
 
-    /* options that can be passed in */
-    var opts = {
-        smokeCount: 5000,
-        smokePerPin: 30,
-        smokePerSecond: 20
+  if (_opts) {
+    for (var i in opts) {
+      if (_opts[i] !== undefined) {
+        opts[i] = _opts[i];
+      }
     }
+  }
 
-    if(_opts){
-        for(var i in opts){
-            if(_opts[i] !== undefined){
-                opts[i] = _opts[i];
-            }
-        }
-    }
+  this.opts = opts;
+  this.geometry = new THREE.Geometry();
+  this.attributes = {
+    myStartTime: { type: "f", value: [] },
+    myStartLat: { type: "f", value: [] },
+    myStartLon: { type: "f", value: [] },
+    altitude: { type: "f", value: [] },
+    active: { type: "f", value: [] },
+  };
 
-    this.opts = opts;
-    this.geometry = new THREE.Geometry();
-    this.attributes = {
-        myStartTime: {type: 'f', value: []},
-        myStartLat: {type: 'f', value: []},
-        myStartLon: {type: 'f', value: []},
-        altitude: {type: 'f', value: []},
-        active: {type: 'f', value: []}
-    };
+  this.uniforms = {
+    currentTime: { type: "f", value: 0.0 },
+    color: { type: "c", value: new THREE.Color("#aaa") },
+  };
 
-    this.uniforms = {
-        currentTime: { type: 'f', value: 0.0},
-        color: { type: 'c', value: new THREE.Color("#aaa")},
-    }
+  var material = new THREE.ShaderMaterial({
+    uniforms: this.uniforms,
+    attributes: this.attributes,
+    vertexShader: vertexShader,
+    fragmentShader: fragmentShader,
+    transparent: true,
+  });
 
-    var material = new THREE.ShaderMaterial( {
-        uniforms:       this.uniforms,
-        attributes:     this.attributes,
-        vertexShader:   vertexShader,
-        fragmentShader: fragmentShader,
-        transparent:    true
-    });
+  for (var i = 0; i < opts.smokeCount; i++) {
+    var vertex = new THREE.Vector3();
+    vertex.set(0, 0, 0);
+    this.geometry.vertices.push(vertex);
+    this.attributes.myStartTime.value[i] = 0.0;
+    this.attributes.myStartLat.value[i] = 0.0;
+    this.attributes.myStartLon.value[i] = 0.0;
+    this.attributes.altitude.value[i] = 0.0;
+    this.attributes.active.value[i] = 0.0;
+  }
 
-    for(var i = 0; i< opts.smokeCount; i++){
-        var vertex = new THREE.Vector3();
-        vertex.set(0,0,0);
-        this.geometry.vertices.push( vertex );
-        this.attributes.myStartTime.value[i] = 0.0;
-        this.attributes.myStartLat.value[i] = 0.0;
-        this.attributes.myStartLon.value[i] = 0.0;
-        this.attributes.altitude.value[i] = 0.0;
-        this.attributes.active.value[i] = 0.0;
-    }
+  this.attributes.myStartTime.needsUpdate = true;
+  this.attributes.myStartLat.needsUpdate = true;
+  this.attributes.myStartLon.needsUpdate = true;
+  this.attributes.altitude.needsUpdate = true;
+  this.attributes.active.needsUpdate = true;
+
+  this.smokeIndex = 0;
+  this.totalRunTime = 0;
+
+  scene.add(new THREE.ParticleSystem(this.geometry, material));
+};
+
+SmokeProvider.prototype.setFire = function (lat, lon, altitude) {
+  var point = utils.mapPoint(lat, lon);
+
+  /* add the smoke */
+  var startSmokeIndex = this.smokeIndex;
+
+  for (var i = 0; i < this.opts.smokePerPin; i++) {
+    this.geometry.vertices[this.smokeIndex].set(
+      point.x * altitude,
+      point.y * altitude,
+      point.z * altitude
+    );
+    this.geometry.verticesNeedUpdate = true;
+    this.attributes.myStartTime.value[this.smokeIndex] =
+      this.totalRunTime + ((1000 * i) / this.opts.smokePerSecond + 1500);
+    this.attributes.myStartLat.value[this.smokeIndex] = lat;
+    this.attributes.myStartLon.value[this.smokeIndex] = lon;
+    this.attributes.altitude.value[this.smokeIndex] = altitude;
+    this.attributes.active.value[this.smokeIndex] = 1.0;
 
     this.attributes.myStartTime.needsUpdate = true;
     this.attributes.myStartLat.needsUpdate = true;
@@ -45860,227 +46169,198 @@ var SmokeProvider = function(scene, _opts){
     this.attributes.altitude.needsUpdate = true;
     this.attributes.active.needsUpdate = true;
 
-    this.smokeIndex = 0;
-    this.totalRunTime = 0;
+    this.smokeIndex++;
+    this.smokeIndex = this.smokeIndex % this.geometry.vertices.length;
+  }
 
-    scene.add( new THREE.ParticleSystem( this.geometry, material));
-
+  return startSmokeIndex;
 };
 
-SmokeProvider.prototype.setFire = function(lat, lon, altitude){
-
-    var point = utils.mapPoint(lat, lon);
-
-    /* add the smoke */
-    var startSmokeIndex = this.smokeIndex;
-
-    for(var i = 0; i< this.opts.smokePerPin; i++){
-        this.geometry.vertices[this.smokeIndex].set(point.x * altitude, point.y * altitude, point.z * altitude);
-        this.geometry.verticesNeedUpdate = true;
-        this.attributes.myStartTime.value[this.smokeIndex] = this.totalRunTime + (1000*i/this.opts.smokePerSecond + 1500);
-        this.attributes.myStartLat.value[this.smokeIndex] = lat;
-        this.attributes.myStartLon.value[this.smokeIndex] = lon;
-        this.attributes.altitude.value[this.smokeIndex] = altitude;
-        this.attributes.active.value[this.smokeIndex] = 1.0;
-
-        this.attributes.myStartTime.needsUpdate = true;
-        this.attributes.myStartLat.needsUpdate = true;
-        this.attributes.myStartLon.needsUpdate = true;
-        this.attributes.altitude.needsUpdate = true;
-        this.attributes.active.needsUpdate = true;
-
-        this.smokeIndex++;
-        this.smokeIndex = this.smokeIndex % this.geometry.vertices.length;
-    }
-
-
-    return startSmokeIndex;
-
+SmokeProvider.prototype.extinguish = function (index) {
+  for (var i = 0; i < this.opts.smokePerPin; i++) {
+    this.attributes.active.value[(i + index) % this.opts.smokeCount] = 0.0;
+    this.attributes.active.needsUpdate = true;
+  }
 };
 
-SmokeProvider.prototype.extinguish = function(index){
-    for(var i = 0; i< this.opts.smokePerPin; i++){
-        this.attributes.active.value[(i + index) % this.opts.smokeCount] = 0.0;
-        this.attributes.active.needsUpdate = true;
-    }
+SmokeProvider.prototype.changeAltitude = function (altitude, index) {
+  for (var i = 0; i < this.opts.smokePerPin; i++) {
+    this.attributes.altitude.value[(i + index) % this.opts.smokeCount] =
+      altitude;
+    this.attributes.altitude.needsUpdate = true;
+  }
 };
 
-SmokeProvider.prototype.changeAltitude = function(altitude, index){
-    for(var i = 0; i< this.opts.smokePerPin; i++){
-        this.attributes.altitude.value[(i + index) % this.opts.smokeCount] = altitude;
-        this.attributes.altitude.needsUpdate = true;
-    }
-
+SmokeProvider.prototype.tick = function (totalRunTime) {
+  this.totalRunTime = totalRunTime;
+  this.uniforms.currentTime.value = this.totalRunTime;
 };
 
-SmokeProvider.prototype.tick = function(totalRunTime){
-    this.totalRunTime = totalRunTime;
-    this.uniforms.currentTime.value = this.totalRunTime;
-};
-
-module.exports =  SmokeProvider;
+module.exports = SmokeProvider;
 
 },{"./utils":21,"three":12}],20:[function(require,module,exports){
-var THREE = require('three');
+var THREE = require("three");
 
 // based on http://stemkoski.github.io/Three.js/Texture-Animation.html
-var TextureAnimator = function(texture, tilesVert, tilesHoriz, numTiles, tileDispDuration, repeatAtTile) 
-{   
-    // note: texture passed by reference, will be updated by the update function.
+var TextureAnimator = function (
+  texture,
+  tilesVert,
+  tilesHoriz,
+  numTiles,
+  tileDispDuration,
+  repeatAtTile
+) {
+  // note: texture passed by reference, will be updated by the update function.
 
-    if(repeatAtTile == undefined){
-        this.repeatAtTile=-1;
+  if (repeatAtTile == undefined) {
+    this.repeatAtTile = -1;
+  }
+
+  this.shutDownFlag = this.repeatAtTile < 0;
+  this.done = false;
+
+  this.tilesHorizontal = tilesHoriz;
+  this.tilesVertical = tilesVert;
+
+  // how many images does this spritesheet contain?
+  //  usually equals tilesHoriz * tilesVert, but not necessarily,
+  //  if there at blank tiles at the bottom of the spritesheet.
+  this.numberOfTiles = numTiles;
+  texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
+  texture.repeat.set(1 / this.tilesHorizontal, 1 / this.tilesVertical);
+
+  // how long should each image be displayed?
+  this.tileDisplayDuration = tileDispDuration;
+
+  // how long has the current image been displayed?
+  this.currentDisplayTime = 0;
+
+  // which image is currently being displayed?
+  this.currentTile = 0;
+
+  texture.offset.y = 1;
+
+  this.update = function (milliSec) {
+    this.currentDisplayTime += milliSec;
+    while (!this.done && this.currentDisplayTime > this.tileDisplayDuration) {
+      if (this.shutDownFlag && this.currentTile >= numTiles) {
+        this.done = true;
+        this.shutDownCb();
+      } else {
+        this.currentDisplayTime -= this.tileDisplayDuration;
+        this.currentTile++;
+        if (this.currentTile == numTiles && !this.shutDownFlag)
+          this.currentTile = repeatAtTile;
+        var currentColumn = this.currentTile % this.tilesHorizontal;
+        texture.offset.x = currentColumn / this.tilesHorizontal;
+        var currentRow = Math.floor(this.currentTile / this.tilesHorizontal);
+        texture.offset.y =
+          1 - currentRow / this.tilesVertical - 1 / this.tilesVertical;
+      }
     }
-
-    this.shutDownFlag = (this.repeatAtTile < 0);
-    this.done = false;
-
-    this.tilesHorizontal = tilesHoriz;
-    this.tilesVertical = tilesVert;
-
-    // how many images does this spritesheet contain?
-    //  usually equals tilesHoriz * tilesVert, but not necessarily,
-    //  if there at blank tiles at the bottom of the spritesheet. 
-    this.numberOfTiles = numTiles;
-    texture.wrapS = texture.wrapT = THREE.RepeatWrapping; 
-    texture.repeat.set( 1 / this.tilesHorizontal, 1 / this.tilesVertical );
-
-    // how long should each image be displayed?
-    this.tileDisplayDuration = tileDispDuration;
-
-    // how long has the current image been displayed?
-    this.currentDisplayTime = 0;
-
-    // which image is currently being displayed?
-    this.currentTile = 0;
-
-    texture.offset.y = 1;
-
-    this.update = function( milliSec )
-    {
-        this.currentDisplayTime += milliSec;
-        while (!this.done && this.currentDisplayTime > this.tileDisplayDuration)
-            {
-                if(this.shutDownFlag && this.currentTile >= numTiles){
-                    this.done = true;
-                    this.shutDownCb();
-                } else {
-                    this.currentDisplayTime -= this.tileDisplayDuration;
-                    this.currentTile++;
-                    if (this.currentTile == numTiles && !this.shutDownFlag)
-                        this.currentTile = repeatAtTile;
-                    var currentColumn = this.currentTile % this.tilesHorizontal;
-                    texture.offset.x = currentColumn / this.tilesHorizontal;
-                    var currentRow = Math.floor( this.currentTile / this.tilesHorizontal );
-                    texture.offset.y = 1-(currentRow / this.tilesVertical) - 1/this.tilesVertical;
-                }
-            }
-    };
-    this.shutDown = function(cb){
-        _this.shutDownFlag = true;
-        _this.shutDownCb = cb;
-    }
-
+  };
+  this.shutDown = function (cb) {
+    _this.shutDownFlag = true;
+    _this.shutDownCb = cb;
+  };
 };
 
 module.exports = TextureAnimator;
 
 },{"three":12}],21:[function(require,module,exports){
 var utils = {
+  renderToCanvas: function (width, height, renderFunction) {
+    var buffer = document.createElement("canvas");
+    buffer.width = width;
+    buffer.height = height;
+    renderFunction(buffer.getContext("2d"));
 
-    renderToCanvas: function (width, height, renderFunction) {
-        var buffer = document.createElement('canvas');
-        buffer.width = width;
-        buffer.height = height;
-        renderFunction(buffer.getContext('2d'));
+    return buffer;
+  },
 
-        return buffer;
-    },
-
-    mapPoint: function(lat, lng, scale) {
-        if(!scale){
-            scale = 500;
-        }
-        var phi = (90 - lat) * Math.PI / 180;
-        var theta = (180 - lng) * Math.PI / 180;
-        var x = scale * Math.sin(phi) * Math.cos(theta);
-        var y = scale * Math.cos(phi);
-        var z = scale * Math.sin(phi) * Math.sin(theta);
-        return {x: x, y: y, z:z};
-    },
+  mapPoint: function (lat, lng, scale) {
+    if (!scale) {
+      scale = 500;
+    }
+    var phi = ((90 - lat) * Math.PI) / 180;
+    var theta = ((180 - lng) * Math.PI) / 180;
+    var x = scale * Math.sin(phi) * Math.cos(theta);
+    var y = scale * Math.cos(phi);
+    var z = scale * Math.sin(phi) * Math.sin(theta);
+    return { x: x, y: y, z: z };
+  },
 
   /* from http://stackoverflow.com/questions/5623838/rgb-to-hex-and-hex-to-rgb */
 
-  hexToRgb: function(hex) {
-      // Expand shorthand form (e.g. "03F") to full form (e.g. "0033FF")
-      var shorthandRegex = /^#?([a-f\d])([a-f\d])([a-f\d])$/i;
-      hex = hex.replace(shorthandRegex, function(m, r, g, b) {
-          return r + r + g + g + b + b;
-      });
+  hexToRgb: function (hex) {
+    // Expand shorthand form (e.g. "03F") to full form (e.g. "0033FF")
+    var shorthandRegex = /^#?([a-f\d])([a-f\d])([a-f\d])$/i;
+    hex = hex.replace(shorthandRegex, function (m, r, g, b) {
+      return r + r + g + g + b + b;
+    });
 
-      var result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
-      return result ? {
+    var result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+    return result
+      ? {
           r: parseInt(result[1], 16),
           g: parseInt(result[2], 16),
-          b: parseInt(result[3], 16)
-      } : null;
+          b: parseInt(result[3], 16),
+        }
+      : null;
   },
 
-  createLabel:  function(text, size, color, font, underlineColor) {
+  createLabel: function (text, size, color, font, underlineColor) {
+    var canvas = document.createElement("canvas");
+    var context = canvas.getContext("2d");
+    context.font = size + "pt " + font;
 
-      var canvas = document.createElement("canvas");
-      var context = canvas.getContext("2d");
-      context.font = size + "pt " + font;
+    var textWidth = context.measureText(text).width;
 
-      var textWidth = context.measureText(text).width;
+    canvas.width = textWidth;
+    canvas.height = size + 10;
 
-      canvas.width = textWidth;
-      canvas.height = size + 10;
+    // better if canvases have even heights
+    if (canvas.width % 2) {
+      canvas.width++;
+    }
+    if (canvas.height % 2) {
+      canvas.height++;
+    }
 
-      // better if canvases have even heights
-      if(canvas.width % 2){
-          canvas.width++;
-      }
-      if(canvas.height % 2){
-          canvas.height++;
-      }
+    if (underlineColor) {
+      canvas.height += 30;
+    }
+    context.font = size + "pt " + font;
 
-      if(underlineColor){
-          canvas.height += 30;
-      }
-      context.font = size + "pt " + font;
+    context.textAlign = "center";
+    context.textBaseline = "middle";
 
-      context.textAlign = "center";
-      context.textBaseline = "middle";
+    context.strokeStyle = "black";
 
-      context.strokeStyle = 'black';
+    context.miterLimit = 2;
+    context.lineJoin = "circle";
+    context.lineWidth = 6;
 
-      context.miterLimit = 2;
-      context.lineJoin = 'circle';
-      context.lineWidth = 6;
+    context.strokeText(text, canvas.width / 2, canvas.height / 2);
 
-      context.strokeText(text, canvas.width / 2, canvas.height / 2);
+    context.lineWidth = 2;
 
-      context.lineWidth = 2;
+    context.fillStyle = color;
+    context.fillText(text, canvas.width / 2, canvas.height / 2);
 
-      context.fillStyle = color;
-      context.fillText(text, canvas.width / 2, canvas.height / 2);
+    if (underlineColor) {
+      context.strokeStyle = underlineColor;
+      context.lineWidth = 4;
+      context.beginPath();
+      context.moveTo(0, canvas.height - 10);
+      context.lineTo(canvas.width - 1, canvas.height - 10);
+      context.stroke();
+    }
 
-      if(underlineColor){
-          context.strokeStyle=underlineColor;
-          context.lineWidth=4;
-          context.beginPath();
-          context.moveTo(0, canvas.height-10);
-          context.lineTo(canvas.width-1, canvas.height-10);
-          context.stroke();
-      }
-
-      return canvas;
-
+    return canvas;
   },
-
 };
 
-module.exports =  utils;
+module.exports = utils;
 
 },{}]},{},[1])
