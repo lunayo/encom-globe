@@ -10,7 +10,8 @@
   "author": "robscanlon@gmail.com",
   "main": "src/Globe.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "lint": "prettier --write src '*.js' '*.json'",
+    "sort": "sort-package-json"
   },
   "dependencies": {
     "hexasphere.js": "*",
