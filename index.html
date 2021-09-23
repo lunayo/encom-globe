@@ -92,7 +92,7 @@
             }
 
             function start(){
-                
+
                 if(globeCount == 1){ // only do this for the first globe that's created. very messy
                     $("#apply-button").click(function(e){
                         globe.destroy(function(){
@@ -130,7 +130,7 @@
                         if(!globe || !$("#globe-dd:checked").length){
                             return;
                         }
-                        
+
                         var lat = Math.random() * 180 - 90,
                            lon = Math.random() * 360 - 180,
                            name = "Test " + Math.floor(Math.random() * 100);
@@ -139,7 +139,7 @@
 
                     }, 5000);
                 }
-                
+
                 /* add 6 satellites in random locations */
 
                 if($("#globe-dd:checked").length){
@@ -154,8 +154,8 @@
                         for(var i = 0; i< 2; i++){
                             for(var j = 0; j< 3; j++){
                                  constellation.push({
-                                    lat: 50 * i - 30 + 15 * Math.random(), 
-                                     lon: 120 * j - 120 + 30 * i, 
+                                    lat: 50 * i - 30 + 15 * Math.random(),
+                                     lon: 120 * j - 120 + 30 * i,
                                      altitude: alt
                                      });
                             }
@@ -173,47 +173,47 @@
 
             }
 
-            function openOptions(){
-                var headerTopPosition = $("#header-top").position().top;
-                var headerBottomPosition = $("#header-bottom").position().top;
-                var headerHeight = $("#header-top").outerHeight(); /* margins or something, whatever */
-                $(".header-animator").offset({top: $(document).height()/2, left: 25});
-                $(".header-animator").height(0);
+            // function openOptions(){
+            //     var headerTopPosition = $("#header-top").position().top;
+            //     var headerBottomPosition = $("#header-bottom").position().top;
+            //     var headerHeight = $("#header-top").outerHeight(); /* margins or something, whatever */
+            //     $(".header-animator").offset({top: $(document).height()/2, left: 25});
+            //     $(".header-animator").height(0);
 
-                $("#options").data("left", $("#options").css("left"));
-                $("#thumbprint").data("left", $("#thumbprint").css("left"));
-                $("#options").animate({left: 0}, 500);
-                $("#thumbprint").animate({left: 265}, 500);
+            //     // $("#options").data("left", $("#options").css("left"));
+            //     // $("#thumbprint").data("left", $("#thumbprint").css("left"));
+            //     // $("#options").animate({left: 0}, 500);
+            //     // $("#thumbprint").animate({left: 265}, 500);
 
-                $("#options-content").delay(1500).animate({opacity: 1}, 500);
+            //     // $("#options-content").delay(1500).animate({opacity: 1}, 500);
 
-                setTimeout(function(){
-                    $(".header-animator").css("visibility", "visible");
+            //     setTimeout(function(){
+            //         $(".header-animator").css("visibility", "visible");
 
-                    $("#header-animator-outside").animate({
-                        top: headerTopPosition,
-                        height: headerBottomPosition - headerTopPosition + headerHeight
-                        }, 500);
+            //         $("#header-animator-outside").animate({
+            //             top: headerTopPosition,
+            //             height: headerBottomPosition - headerTopPosition + headerHeight
+            //             }, 500);
 
-                    $("#header-animator-inside").animate({
-                        top: headerTopPosition + headerHeight,
-                        height: headerBottomPosition - headerTopPosition - headerHeight
-                        }, 500);
-                }, 500);
+            //         $("#header-animator-inside").animate({
+            //             top: headerTopPosition + headerHeight,
+            //             height: headerBottomPosition - headerTopPosition - headerHeight
+            //             }, 500);
+            //     }, 500);
 
-                setTimeout(function(){
-                    $(".header-animator").css("visibility", "hidden");
-                    $(".header").css("visibility", "visible");
-                }, 1000);
+            //     setTimeout(function(){
+            //         $(".header-animator").css("visibility", "hidden");
+            //         $(".header").css("visibility", "visible");
+            //     }, 1000);
 
-            }
+            // }
 
-            function closeOptions(){
-                $("#options").animate({left: $("#options").data("left")}, 500);
-                $("#thumbprint").animate({left: $("#thumbprint").data("left")}, 500);
-                $("#options-content").animate({opacity: 0}, 500);
-                $(".header").css("visibility", "hidden");
-            }
+            // function closeOptions(){
+            //     $("#options").animate({left: $("#options").data("left")}, 500);
+            //     $("#thumbprint").animate({left: $("#thumbprint").data("left")}, 500);
+            //     $("#options-content").animate({opacity: 0}, 500);
+            //     $(".header").css("visibility", "hidden");
+            // }
 
             $(function() {
                 var open = false;
@@ -236,7 +236,7 @@
                             globe.setBaseColor(color.toHexString());
                         }
                     }
-                }); 
+                });
 
                 $("#pin-color").spectrum({
                     color: "#8FD8D8",
@@ -247,7 +247,7 @@
                             globe.setPinColor(color.toHexString());
                         }
                     }
-                }); 
+                });
 
                 $("#marker-color").spectrum({
                     color: "#ffcc00",
@@ -258,7 +258,7 @@
                             globe.setMarkerColor(color.toHexString());
                         }
                     }
-                }); 
+                });
 
                 $("#satellite-color").spectrum({
                     color: "#ff0000",
@@ -272,7 +272,7 @@
                         }
                     }
 
-                }); 
+                });
 
                 $("[data-slider]")
                 .each(function () {
@@ -361,16 +361,16 @@
                                 $("#thumbprint").click(function(){
                                     if(!open){
                                         open = true;
-                                        openOptions();
+                                        // openOptions();
                                         } else {
                                         open = false;
-                                        closeOptions();
+                                        // closeOptions();
                                     }
                                 });
 
                                 setTimeout(function(){
                                     open = true;
-                                    openOptions();
+                                    // openOptions();
                                 }, 3000);
 
                                 createGlobe();
@@ -398,122 +398,25 @@
     </head>
     <body>
         <div id="container">
-            <div id="banner">
-                Encom Globe
-                <small>by <a href="http://twitter.com/arscan">@arscan</a></small>
-
-            </div>
             <div id="globe">
-            </div>
-            <div id="info-box">
-                A tribute to the <a href="http://work.gmunk.com/TRON-Board-Room">boardroom scene</a> in Disney's <a href="http://www.imdb.com/title/tt1104001/">Tron: Legacy</a>.  Built for reuse. Source on <a href="http://github.com/arscan/encom-globe/" class="github-link">Github</a>.
             </div>
             <div id="options">
                 <div id="options-content">
-                    <h3>Add element by clicking map below</h3>
-                    <img class="projection" src="resources/point_picker.png" width= "280px"/>
-                    <ul id = "add-element">
-                        <li id="add-pin" class="button selected">Drop Pin</li>
-                        <li id="add-marker" class="button">Marker</li>
-                        <li id="add-satellite" class="button">Satellite</li>
-                    </ul>
-                    <h3>Configure Globe</h3>
 
-                    <div>
-                        <label>
-                            Color Palette
-                        </label>
-                        <ul id="color-options">
-                            <li title="Globe Color"><input type="text" id="globe-color" value="#ffcc00"></li>
-                            <li title="Pin Color"><input type="text" id="pin-color" value="#8FD8D8"></li>
-                            <li title="Marker Color"><input type="text" id="marker-color" value="#ffcc00"></li>
-                            <li title="Satellite Core Color"><input type="text" id="satellite-color" value="#ff0000"></li>
-                        </ul>
 
-                        <label>
-                            Globe Scale
-                        </label>
-                        <input type="text" id="globe-scale" data-slider="true" data-slider-range=".1, 3.0" data-slider-step=".01" data-slider-highlight="true" value="1.0"/>
-
-                        <label>
-                            View Angle
-                        </label>
-                        <input type="text" id="globe-va" data-slider="true" data-slider-range="-1.57, 1.57" data-slider-step=".01" data-slider-highlight="true" value=".1"/>
-
-                        <label>
-                            Seconds per Rotation
-                        </label>
-                        <input type="text" id="globe-spr" data-slider="true" data-slider-range="1, 120" data-slider-step="1" data-slider-highlight="true" value="28"/>
-
-                        <!--
-                        <label>
-                            Points per Degree
-                        </label>
-                        <input type="text" id="globe-ppd" data-slider="true" data-slider-range=".5,4" data-slider-step=".1" data-slider-highlight="true" value="1.1"/>
-
-                        <label>
-                            Point Size
-                        </label>
-                        <input type="text" id="globe-ps" data-slider="true" data-slider-range=".1,1.0" data-slider-step=".1" data-slider-highlight="true" value=".6"/>
-                        -->
-
-                        <label>
-                            Intro Duration (ms)
-                        </label>
-                        <input type="text" id="globe-id" data-slider="true" data-slider-range="500,5000" data-slider-step="100" data-slider-highlight="true" value="2000"/>
-
-                        <label>
-                            Max Pins
-                        </label>
-                        <input type="text" id="globe-mp" data-slider="true" data-slider-range="10,1000" data-slider-step="10" data-slider-highlight="true" value="500"/>
-
-                        <label>
-                            Max Markers
-                        </label>
-                        <input type="text" id="globe-mm" data-slider="true" data-slider-range="1,10" data-slider-step="1" data-slider-highlight="true" value="4"/>
-
-                        <label>
-                            Satellite Altitude
-                        </label>
-                        <input type="text" id="globe-sa" data-slider="true" data-slider-range="1.0,3.0" data-slider-step=".01" data-slider-highlight="true" value="1.3"/>
-
-                        <label>
-                            Satellite Intensity
-                        </label>
-                        <input type="text" id="globe-si" data-slider="true" data-slider-range="3,12" data-slider-step="1" data-slider-highlight="true" value="8"/>
-
-                        <label>
-                            Load Dummy Data
-                        </label>
-                        <div class="switch">
-                            <input type="checkbox" id="globe-dd" value="1" checked>
-                        </div>
-                    </div>
-
-                    <div id="apply-button" class="button">Reload</div>
-
-                    
                 </div>
             </div>
             <div class="header" id="header-top">
-                <div class="header-left-section">CENTRAL SYSTEM DATA ... <span class="alt-1">LAUNCH ENCOM GLOBALIZATION</span></div>
-                <div class="header-right-section">OIA | 012</div>
             </div>
 
             <div class="header" id="header-bottom">
-                <div class="header-left-section">TOUCHPOINT KEYBOARD ... <span class="alt-1">INTERACTION SEQUENCING</span></div>
-                <div class="header-right-section">SYS | O12</div>
             </div>
             <div id="thumbprint">
-                <img src="resources/thumbprint.png" />
             </div>
             <!-- probably should remove these and have them created in the script-->
             <div class="header-animator" id="header-animator-inside"></div>
             <div class="header-animator" id="header-animator-outside"></div>
 
         </div>
-        <!-- ref:include analytics -->
-        <!-- endref -->
     </body>
 </html>
-
