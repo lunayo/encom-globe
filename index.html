@@ -1,47 +1,41 @@
 <!DOCTYPE html>
 <html lang="en">
-    <head>
-        <meta charset="utf-8">
-        <meta property="og:image" content="resources/fp_icon.jpg" />
-        <meta property="og:description" content="A WebGL implementation of the Encom Boardroom visualization in Tron: Legacy" />
-        <title>Encom Globe</title>
+  <head>
+    <meta charset="utf-8" />
+    <meta property="og:image" content="resources/fp_icon.jpg" />
+    <meta
+      property="og:description"
+      content="A WebGL implementation of the Encom Boardroom visualization in Tron: Legacy"
+    />
+    <title>Encom Globe</title>
 
-        <!-- these are just for the demo page / options -->
-        <script src="//code.jquery.com/jquery-2.0.3.min.js"></script>
-        <script src="//ajax.googleapis.com/ajax/libs/jqueryui/1.10.2/jquery-ui.min.js"></script>
-        <script src="include/spectrum.js"></script>
-        <link href="include/spectrum.css" rel="stylesheet" type="text/css" />
-        <script src="include/jquery.switchButton.js"></script>
-        <link href="include/jquery.switchButton.css" rel="stylesheet" type="text/css" />
-        <script src="include/simple-slider.js"></script>
-        <script src="include/Detector.js"></script>
+    <!-- these are just for the demo page / options -->
+    <script src="//code.jquery.com/jquery-2.0.3.min.js"></script>
+    <script src="//ajax.googleapis.com/ajax/libs/jqueryui/1.10.2/jquery-ui.min.js"></script>
+    <script src="include/spectrum.js"></script>
+    <link href="include/spectrum.css" rel="stylesheet" type="text/css" />
+    <script src="include/jquery.switchButton.js"></script>
+    <link
+      href="include/jquery.switchButton.css"
+      rel="stylesheet"
+      type="text/css"
+    />
+    <script src="include/simple-slider.js"></script>
+    <script src="include/Detector.js"></script>
 
-        <link href="styles.css" rel="stylesheet" type="text/css" />
+    <link href="styles.css" rel="stylesheet" type="text/css" />
 
-        <!-- required for the application -->
-        <script src="data.js"></script>
-        <script src="grid.js"></script>
+    <!-- required for the application -->
+    <script src="data.js"></script>
+    <script src="grid.js"></script>
 
-        <script src="build/encom-globe.js"></script>
+    <script src="build/encom-globe.js"></script>
 
-        <script src="index.js"></script>
-
-    </head>
-    <body>
-        <div id="container">
-            <div id="globe">
-            </div>
-            <div class="header" id="header-top">
-            </div>
-
-            <div class="header" id="header-bottom">
-            </div>
-            <div id="thumbprint">
-            </div>
-            <!-- probably should remove these and have them created in the script-->
-            <div class="header-animator" id="header-animator-inside"></div>
-            <div class="header-animator" id="header-animator-outside"></div>
-
-        </div>
-    </body>
+    <script src="index.js"></script>
+  </head>
+  <body>
+    <div id="container">
+      <div id="globe"></div>
+    </div>
+  </body>
 </html>
