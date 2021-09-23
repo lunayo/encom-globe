@@ -204,68 +204,6 @@ $(function () {
     },
   });
 
-  $("[data-slider]")
-    .each(function () {
-      var input = $(this);
-      $("<span>")
-        .addClass("slider-output")
-        .insertAfter($(this))
-        .html(input.val());
-    })
-    .bind("slider:ready slider:changed", function (event, data) {
-      $(this).nextAll(".slider-output:first").html(data.value.toFixed(3));
-    });
-
-  $(":checkbox").switchButton();
-
-  $("#globe-scale").bind("slider:changed", function (event, data) {
-    if (globe) {
-      globe.setScale(data.value);
-    }
-  });
-
-  $("#globe-va").bind("slider:changed", function (event, data) {
-    if (globe) {
-      globe.viewAngle = data.value;
-    }
-  });
-
-  $("#globe-spr").bind("slider:changed", function (event, data) {
-    if (globe) {
-      globe.dayLength = data.value * 1000;
-    }
-  });
-
-  $("#globe-mp").bind("slider:changed", function (event, data) {
-    if (globe) {
-      globe.setMaxPins(data.value);
-    }
-  });
-
-  $("#globe-mm").bind("slider:changed", function (event, data) {
-    if (globe) {
-      globe.setMaxMarkers(data.value);
-    }
-  });
-
-  $("#globe-sa").bind("slider:changed", function (event, data) {
-    if (globe) {
-      for (var x in globe.satellites) {
-        globe.satellites[x].changeAltitude(data.value);
-      }
-    }
-  });
-
-  $("#globe-si").bind("slider:changed", function (event, data) {
-    if (globe) {
-      for (var x in globe.satellites) {
-        globe.satellites[x].changeCanvas(data.value);
-      }
-    }
-  });
-
-  var docHeight = $(document).height();
-
   WebFontConfig = {
     google: {
       families: ["Inconsolata"],
