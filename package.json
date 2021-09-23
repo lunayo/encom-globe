@@ -24,6 +24,7 @@
     "browserify": "~3.41.0",
     "grunt": "~0.4.2",
     "grunt-browserify": "~2.0.7",
+    "grunt-cli": "^1.4.3",
     "grunt-contrib-uglify": "~0.4.0",
     "grunt-contrib-watch": "~0.5.3",
     "grunt-shell": "~0.6.4",
