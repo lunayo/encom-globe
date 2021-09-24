@@ -142,13 +142,13 @@ function start() {
 
     /* add pins at random locations */
     setInterval(function () {
-      if (!globe || !$('#globe-dd:checked').length) {
-        return
-      }
+      // if (!globe || !$('#globe-dd:checked').length) {
+      //   return
+      // }
 
       var lat = Math.random() * 180 - 90,
         lon = Math.random() * 360 - 180,
-        name = 'Test ' + Math.floor(Math.random() * 100)
+        name = '' // 'Test ' + Math.floor(Math.random() * 100)
 
       globe.addPin(lat, lon, name)
     }, 5000)
