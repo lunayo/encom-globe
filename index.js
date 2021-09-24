@@ -13,16 +13,16 @@ function createGlobe() {
     font: 'Inconsolata',
     data: newData, // copy the data array
     tiles: grid.tiles,
-    baseColor: $('#globe-color').val(),
-    markerColor: $('#marker-color').val(),
-    pinColor: $('#pin-color').val(),
-    satelliteColor: $('#satellite-color').val(),
-    scale: parseFloat($('#globe-scale').val()),
-    dayLength: 1000 * parseFloat($('#globe-spr').val()),
-    introLinesDuration: parseFloat($('#globe-id').val()),
-    maxPins: parseFloat($('#globe-mp').val()),
-    maxMarkers: parseFloat($('#globe-mm').val()),
-    viewAngle: parseFloat($('#globe-va').val()),
+    // baseColor: $('#globe-color').val(),
+    // markerColor: $('#marker-color').val(),
+    // pinColor: $('#pin-color').val(),
+    // satelliteColor: $('#satellite-color').val(),
+    // scale: parseFloat($('#globe-scale').val()),
+    // dayLength: 1000 * parseFloat($('#globe-spr').val()),
+    // introLinesDuration: parseFloat($('#globe-id').val()),
+    // maxPins: parseFloat($('#globe-mp').val()),
+    // maxMarkers: parseFloat($('#globe-mm').val()),
+    // viewAngle: parseFloat($('#globe-va').val()),
   })
 
   $('#globe').append(globe.domElement)
@@ -57,42 +57,8 @@ function animate() {
 }
 
 function start() {
-  if (globeCount == 1) {
+  if (globeCount === 1) {
     // only do this for the first globe that's created. very messy
-    $('#apply-button').click(function (e) {
-      globe.destroy(function () {
-        createGlobe()
-      })
-    })
-    $('.projection').click(function (e) {
-      var offset = $(this).offset()
-      var latLon = projectionToLatLng(
-        $('.projection').width(),
-        $('.projection').height(),
-        e.clientX - offset.left,
-        e.clientY - offset.top
-      )
-
-      var selectedId = $('#add-element .selected').attr('id')
-
-      if (selectedId == 'add-pin') {
-        globe.addPin(latLon.lat, latLon.lon, 'User Dropped Pin')
-      } else if (selectedId == 'add-marker') {
-        globe.addMarker(latLon.lat, latLon.lon, 'User Marker', true)
-      } else if (selectedId == 'add-satellite') {
-        var opts = {
-          coreColor: $('#satellite-color').val(),
-          numWaves: parseInt($('#globe-si').val()),
-        }
-        globe.addSatellite(latLon.lat, latLon.lon, parseFloat($('#globe-sa').val()), opts)
-      }
-    })
-
-    $('#add-element li').click(function (e) {
-      $('#add-element li').removeClass('selected')
-      $(e.currentTarget).addClass('selected')
-    })
-
     animate()
 
     /* add pins at random locations */
@@ -108,37 +74,6 @@ function start() {
       globe.addPin(lat, lon, name)
     }, 5000)
   }
-
-  /* add 6 satellites in random locations */
-
-  if ($('#globe-dd:checked').length) {
-    setTimeout(function () {
-      var constellation = []
-      var opts = {
-        coreColor: $('#satellite-color').val(),
-        numWaves: parseInt($('#globe-si').val()),
-      }
-      var alt = parseFloat($('#globe-sa').val())
-
-      for (var i = 0; i < 2; i++) {
-        for (var j = 0; j < 3; j++) {
-          constellation.push({
-            lat: 50 * i - 30 + 15 * Math.random(),
-            lon: 120 * j - 120 + 30 * i,
-            altitude: alt,
-          })
-        }
-      }
-
-      globe.addConstellation(constellation, opts)
-    }, 4000)
-
-    /* add the connected points that are in the movie */
-    setTimeout(function () {
-      globe.addMarker(49.25, -123.1, 'Vancouver')
-      globe.addMarker(35.6895, 129.69171, 'Tokyo', true)
-    }, 2000)
-  }
 }
 
 $(function () {
@@ -153,51 +88,51 @@ $(function () {
 
   window.addEventListener('resize', onWindowResize, false)
 
-  $('#globe-color').spectrum({
-    color: '#ffcc00',
-    showButtons: false,
-    showInput: false,
-    change: function (color) {
-      if (globe) {
-        globe.setBaseColor(color.toHexString())
-      }
-    },
-  })
+  // $('#globe-color').spectrum({
+  //   color: '#ffcc00',
+  //   showButtons: false,
+  //   showInput: false,
+  //   change: function (color) {
+  //     if (globe) {
+  //       globe.setBaseColor(color.toHexString())
+  //     }
+  //   },
+  // })
 
-  $('#pin-color').spectrum({
-    color: '#8FD8D8',
-    showButtons: false,
-    showInput: false,
-    change: function (color) {
-      if (globe) {
-        globe.setPinColor(color.toHexString())
-      }
-    },
-  })
+  // $('#pin-color').spectrum({
+  //   color: '#8FD8D8',
+  //   showButtons: false,
+  //   showInput: false,
+  //   change: function (color) {
+  //     if (globe) {
+  //       globe.setPinColor(color.toHexString())
+  //     }
+  //   },
+  // })
 
-  $('#marker-color').spectrum({
-    color: '#ffcc00',
-    showButtons: false,
-    showInput: false,
-    change: function (color) {
-      if (globe) {
-        globe.setMarkerColor(color.toHexString())
-      }
-    },
-  })
+  // $('#marker-color').spectrum({
+  //   color: '#ffcc00',
+  //   showButtons: false,
+  //   showInput: false,
+  //   change: function (color) {
+  //     if (globe) {
+  //       globe.setMarkerColor(color.toHexString())
+  //     }
+  //   },
+  // })
 
-  $('#satellite-color').spectrum({
-    color: '#ff0000',
-    showButtons: false,
-    showInput: false,
-    change: function (color) {
-      if (globe) {
-        for (var x in globe.satellites) {
-          globe.satellites[x].changeCanvas(null, null, color.toHexString())
-        }
-      }
-    },
-  })
+  // $('#satellite-color').spectrum({
+  //   color: '#ff0000',
+  //   showButtons: false,
+  //   showInput: false,
+  //   change: function (color) {
+  //     if (globe) {
+  //       for (var x in globe.satellites) {
+  //         globe.satellites[x].changeCanvas(null, null, color.toHexString())
+  //       }
+  //     }
+  //   },
+  // })
 
   WebFontConfig = {
     google: {
