@@ -1,10 +1,77 @@
-var globe,
-  globeCount = 0
+var Detector = {
+  /**
+   * @author arscan
+   * @author alteredq / http://alteredqualia.com/
+   * @author mr.doob / http://mrdoob.com/
+   */
+  canvas: !!window.CanvasRenderingContext2D,
+  webgl: (function () {
+    try {
+      var canvas = document.createElement('canvas')
+      return (
+        !!window.WebGLRenderingContext &&
+        (canvas.getContext('webgl') || canvas.getContext('experimental-webgl'))
+      )
+    } catch (e) {
+      return false
+    }
+  })(),
+  workers: !!window.Worker,
+  fileapi: window.File && window.FileReader && window.FileList && window.Blob,
+
+  getWebGLErrorMessage: function () {
+    var element = document.createElement('div')
+    element.id = 'webgl-error-message'
+    element.style.fontSize = '13px'
+    element.style.textAlign = 'center'
+    element.style.color = '#fff'
+    element.style.padding = '1.5em'
+    element.style.width = '400px'
+    element.style.margin = '5em auto 0'
+
+    if (!this.webgl) {
+      element.innerHTML = window.WebGLRenderingContext
+        ? [
+            'Your graphics card does not seem to support <a href="http://khronos.org/webgl/wiki/Getting_a_WebGL_Implementation">WebGL</a>.<br />',
+            'Find out how to get it <a href="http://get.webgl.org/">here</a>.<br />',
+            'Check out the repo on <a href="http://github.com/arscan/encom-globe">Github</a> to see what this looks like.',
+          ].join('\n')
+        : [
+            'Your browser does not seem to support <a href="http://khronos.org/webgl/wiki/Getting_a_WebGL_Implementation">WebGL</a>.<br/>',
+            'Find out how to get it <a href="http://get.webgl.org/">here</a>.<br />',
+            'Check out the repo on <a href="http://github.com/arscan/encom-globe">Github</a> to see what this looks like.',
+          ].join('\n')
+    }
+
+    return element
+  },
+
+  addGetWebGLMessage: function (parameters) {
+    var parent, id, element
+
+    parameters = parameters || {}
+
+    parent = parameters.parent !== undefined ? parameters.parent : document.body
+    id = parameters.id !== undefined ? parameters.id : 'oldie'
+
+    element = Detector.getWebGLErrorMessage()
+    element.id = id
+
+    if (!this.webgl) {
+      parent.appendChild(element)
+    }
+  },
+}
+
+///////////////////////////////////////////////
+
+var globe
+var globeCount = 0
 
 function createGlobe() {
   var newData = []
   globeCount++
-  $('#globe canvas').remove()
+  // $('#globe canvas').remove()
   // if($("#globe-dd:checked").length){
   newData = data.slice()
   // }
@@ -25,8 +92,20 @@ function createGlobe() {
     // viewAngle: parseFloat($('#globe-va').val()),
   })
 
-  $('#globe').append(globe.domElement)
+  element('#globe').appendChild(globe.domElement)
   globe.init(start)
+}
+
+function element(selector) {
+  const elements = document.querySelectorAll(selector)
+  if (elements.length === 0) throw new Error(`No elements found for selector '${selector}'`)
+
+  if (elements.length > 1)
+    throw new Error(
+      `Expected exactly 1 element to match selector '${selector}', but found ${elements.length}`
+    )
+
+  return elements[0]
 }
 
 function onWindowResize() {
@@ -76,7 +155,7 @@ function start() {
   }
 }
 
-$(function () {
+function main() {
   var open = false
 
   if (!Detector.webgl) {
@@ -87,52 +166,6 @@ $(function () {
   }
 
   window.addEventListener('resize', onWindowResize, false)
-
-  // $('#globe-color').spectrum({
-  //   color: '#ffcc00',
-  //   showButtons: false,
-  //   showInput: false,
-  //   change: function (color) {
-  //     if (globe) {
-  //       globe.setBaseColor(color.toHexString())
-  //     }
-  //   },
-  // })
-
-  // $('#pin-color').spectrum({
-  //   color: '#8FD8D8',
-  //   showButtons: false,
-  //   showInput: false,
-  //   change: function (color) {
-  //     if (globe) {
-  //       globe.setPinColor(color.toHexString())
-  //     }
-  //   },
-  // })
-
-  // $('#marker-color').spectrum({
-  //   color: '#ffcc00',
-  //   showButtons: false,
-  //   showInput: false,
-  //   change: function (color) {
-  //     if (globe) {
-  //       globe.setMarkerColor(color.toHexString())
-  //     }
-  //   },
-  // })
-
-  // $('#satellite-color').spectrum({
-  //   color: '#ff0000',
-  //   showButtons: false,
-  //   showInput: false,
-  //   change: function (color) {
-  //     if (globe) {
-  //       for (var x in globe.satellites) {
-  //         globe.satellites[x].changeCanvas(null, null, color.toHexString())
-  //       }
-  //     }
-  //   },
-  // })
 
   WebFontConfig = {
     google: {
@@ -155,4 +188,6 @@ $(function () {
   wf.async = 'true'
   var s = document.getElementsByTagName('script')[0]
   s.parentNode.insertBefore(wf, s)
-})
+}
+
+main()
