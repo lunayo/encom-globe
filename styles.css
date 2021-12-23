@@ -365,11 +365,11 @@ label {
     padding: 10px;
   }
 }
-@media (min-width: 800px) {
+/* @media (min-width: 800px) {
   #globe {
     margin-left: 200px;
   }
-}
+} */
 
 @media (max-width: 800px) {
   #thumbprint {

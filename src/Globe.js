@@ -633,6 +633,62 @@ Globe.prototype.setScale = function (_scale) {
   }
 }
 
+function speedToRadian(speed) {
+  degree = speed / 8
+  return degree * Math.PI / 180
+}
+
+
+Globe.prototype.cameraPosition = function() {
+  const x =
+    this.cameraDistance * Math.cos(this.cameraAngle) * Math.cos(this.viewAngle)
+  const y = Math.sin(this.viewAngle) * this.cameraDistance
+  const z =
+    this.cameraDistance * Math.sin(this.cameraAngle) * Math.cos(this.viewAngle)
+  return {
+    x: x,
+    y: y,
+    z: z
+  }
+}
+
+Globe.prototype.animateSwipe = function() {
+  const position = this.cameraPosition()
+  // console.log(`curr corrd: ${coords.x} ${coords.y} ${coords.z}`)
+  // console.log(`target corrd: ${position.x} ${position.y} ${position.z}`)
+  const coords = {x: this.camera.position.x, y: this.camera.position.y, z: this.camera.position.z}
+  new TWEEN.Tween(coords)
+    .to({ x: position.x, y: position.y, z: position.z})
+    .onUpdate(() => {
+      this.camera.position.x = coords.x
+      this.camera.position.y = coords.y
+      // this.camera.position.z = coords.z
+      const cameraAngle = Math.acos(coords.x / (this.cameraDistance * Math.cos(this.viewAngle)))
+      const viewAngle = Math.asin(coords.y / this.cameraDistance)
+      this.camera.position.z = this.cameraDistance * Math.sin(cameraAngle) * Math.cos(viewAngle)
+    }).start()
+}
+
+Globe.prototype.rotateLeft = function (speed) {
+  this.cameraAngle -= speedToRadian(speed)
+  this.animateSwipe()
+}
+
+Globe.prototype.rotateRight = function (speed) {
+  this.cameraAngle += speedToRadian(speed)
+  this.animateSwipe()
+}
+
+Globe.prototype.rotateUp = function (speed) {
+  this.viewAngle -= speedToRadian(speed)
+  this.animateSwipe()
+}
+
+Globe.prototype.rotateDown = function (speed) {
+  this.viewAngle += speedToRadian(speed)
+  this.animateSwipe()
+}
+
 Globe.prototype.tick = function () {
   if (!this.camera) {
     return
@@ -641,7 +697,7 @@ Globe.prototype.tick = function () {
   if (!this.firstRunTime) {
     this.firstRunTime = Date.now()
   }
-  addInitialData.call(this)
+  // addInitialData.call(this)
   TWEEN.update()
 
   if (!this.lastRenderDate) {
@@ -658,17 +714,12 @@ Globe.prototype.tick = function () {
   this.lastRenderDate = new Date()
   var rotateCameraBy = (2 * Math.PI) / (this.dayLength / renderTime)
 
-  this.cameraAngle += rotateCameraBy
+  // this.cameraAngle += rotateCameraBy
+  // this.viewAngle = -60 * Math.PI / 180
 
   if (!this.active) {
     this.cameraDistance += (1000 * renderTime) / 1000
   }
-
-  this.camera.position.x =
-    this.cameraDistance * Math.cos(this.cameraAngle) * Math.cos(this.viewAngle)
-  this.camera.position.y = Math.sin(this.viewAngle) * this.cameraDistance
-  this.camera.position.z =
-    this.cameraDistance * Math.sin(this.cameraAngle) * Math.cos(this.viewAngle)
 
   for (var i in this.satellites) {
     this.satellites[i].tick(this.camera.position, this.cameraAngle, renderTime)

@@ -65,6 +65,64 @@ var Detector = {
 
 ///////////////////////////////////////////////
 
+var controller = new Leap.Controller({
+  enableGestures: true,
+  frameEventName: 'animationFrame'})
+
+var swipeGestures = []
+
+controller.on('frame', function(frame){
+  if(frame.valid && frame.gestures.length > 0){
+    for (var i = 0; i < frame.gestures.length; i++) {
+      var gesture = frame.gestures[i]
+      if(gesture.type == "swipe") {
+        console.log("swipe")
+        if(gesture.state == "start") {
+          swipeGestures = []
+          swipeGestures.push(gesture)
+        }
+        if(gesture.state == "update") {
+          swipeGestures.push(gesture)
+        }
+        if(gesture.state == "stop" && swipeGestures.length > 0)  {
+          averageSpeed = swipeGestures.reduce((acc, c) => acc + c.speed, 0.0) / swipeGestures.length
+          console.log(`average speed: ${averageSpeed}`)
+          //Classify swipe as either horizontal or vertical
+          var isHorizontal = Math.abs(gesture.direction[0]) > Math.abs(gesture.direction[1])
+          //Classify as right-left or up-down
+          if(isHorizontal){
+              if(gesture.direction[0] > 0){
+                  swipeDirection = "right"
+                  if (globe) {
+                    globe.rotateRight(averageSpeed)
+                  }
+              } else {
+                  swipeDirection = "left"
+                  if (globe) {
+                    globe.rotateLeft(averageSpeed)
+                  }
+              }
+          } else { //vertical
+              if(gesture.direction[1] > 0){
+                  swipeDirection = "up"
+                  globe.rotateUp(averageSpeed)
+              } else {
+                  swipeDirection = "down"
+                  globe.rotateDown(averageSpeed)
+              }                  
+          }
+          console.log(swipeDirection)
+          swipeGestures = []
+        }
+       }
+     }
+  }
+})
+
+controller.connect()
+
+///////////////////////////////////////////////
+
 var globe
 var globeCount = 0
 
@@ -140,18 +198,18 @@ function start() {
     // only do this for the first globe that's created. very messy
     animate()
 
-    /* add pins at random locations */
-    setInterval(function () {
-      // if (!globe || !$('#globe-dd:checked').length) {
-      //   return
-      // }
+    // /* add pins at random locations */
+    // setInterval(function () {
+    //   // if (!globe || !$('#globe-dd:checked').length) {
+    //   //   return
+    //   // }
 
-      var lat = Math.random() * 180 - 90,
-        lon = Math.random() * 360 - 180,
-        name = '' // 'Test ' + Math.floor(Math.random() * 100)
+    //   var lat = Math.random() * 180 - 90,
+    //     lon = Math.random() * 360 - 180,
+    //     name = '' // 'Test ' + Math.floor(Math.random() * 100)
 
-      globe.addPin(lat, lon, name)
-    }, 5000)
+    //   globe.addPin(lat, lon, name)
+    // }, 5000)
   }
 }
 
