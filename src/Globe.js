@@ -398,6 +398,12 @@ Globe.prototype.init = function (cb) {
   this.camera.position.z = this.cameraDistance
 
   this.cameraAngle = Math.PI
+  
+  this.camera.position.x =
+    this.cameraDistance * Math.cos(this.cameraAngle) * Math.cos(this.viewAngle)
+  this.camera.position.y = Math.sin(this.viewAngle) * this.cameraDistance
+  this.camera.position.z =
+    this.cameraDistance * Math.sin(this.cameraAngle) * Math.cos(this.viewAngle)
 
   // create the scene
   this.scene = new THREE.Scene()
@@ -446,6 +452,10 @@ Globe.prototype.addPin = function (lat, lon, text) {
 
   var pin = new Pin(lat, lon, text, altitude, this.scene, this.smokeProvider, opts)
 
+  pin.hideSmoke()
+  pin.hideLabel()
+  pin.hideTop()
+  pin.showVideo()
   this.pins.push(pin)
 
   // lets add quadtree stuff
@@ -484,12 +494,14 @@ Globe.prototype.addPin = function (lat, lon, text) {
         hidePins[i].hideLabel()
         hidePins[i].hideSmoke()
         hidePins[i].hideTop()
+        hidePins[i].hideVideo()
         hidePins[i].changeAltitude(Math.random() * 0.05 + 1.1)
       }
     } else if (collisionCount > 0) {
       pin.hideLabel()
       pin.hideSmoke()
       pin.hideTop()
+      pin.hideVideo()
       pin.changeAltitude(Math.random() * 0.05 + 1.1)
     }
   }
@@ -662,31 +674,48 @@ Globe.prototype.animateSwipe = function() {
     .onUpdate(() => {
       this.camera.position.x = coords.x
       this.camera.position.y = coords.y
-      // this.camera.position.z = coords.z
-      const cameraAngle = Math.acos(coords.x / (this.cameraDistance * Math.cos(this.viewAngle)))
-      const viewAngle = Math.asin(coords.y / this.cameraDistance)
-      this.camera.position.z = this.cameraDistance * Math.sin(cameraAngle) * Math.cos(viewAngle)
+      this.camera.position.z = coords.z
+      // const viewAngle = Math.asin(coords.y / this.cameraDistance)
+      // const cameraAngle = Math.acos(coords.x / (this.cameraDistance * Math.cos(viewAngle)))
+      // // this.camera.position.z = this.cameraDistance * Math.sin(cameraAngle) * Math.cos(viewAngle)
     }).start()
+}
+
+Globe.prototype.triggerPinFocus = function() {
+  for (var i in this.pins) {
+    const pin = this.pins[i]
+    var distance = pin.distanceToCamera(this.camera.position)
+    console.log(distance)
+    if(distance > 1230 && distance < 1300) {
+      pin.focusVideo()
+    } else {
+      pin.defocusVideo()
+    }
+  }
 }
 
 Globe.prototype.rotateLeft = function (speed) {
   this.cameraAngle -= speedToRadian(speed)
   this.animateSwipe()
+  this.triggerPinFocus()
 }
 
 Globe.prototype.rotateRight = function (speed) {
   this.cameraAngle += speedToRadian(speed)
   this.animateSwipe()
+  this.triggerPinFocus()
 }
 
 Globe.prototype.rotateUp = function (speed) {
   this.viewAngle -= speedToRadian(speed)
   this.animateSwipe()
+  this.triggerPinFocus()
 }
 
 Globe.prototype.rotateDown = function (speed) {
   this.viewAngle += speedToRadian(speed)
   this.animateSwipe()
+  this.triggerPinFocus()
 }
 
 Globe.prototype.tick = function () {
@@ -696,8 +725,8 @@ Globe.prototype.tick = function () {
 
   if (!this.firstRunTime) {
     this.firstRunTime = Date.now()
-  }
-  // addInitialData.call(this)
+  } 
+  addInitialData.call(this)
   TWEEN.update()
 
   if (!this.lastRenderDate) {
@@ -723,6 +752,10 @@ Globe.prototype.tick = function () {
 
   for (var i in this.satellites) {
     this.satellites[i].tick(this.camera.position, this.cameraAngle, renderTime)
+  }
+
+  for (var i in this.pins) {
+    this.pins[i].tick()
   }
 
   for (var i = 0; i < this.satelliteMeshes.length; i++) {

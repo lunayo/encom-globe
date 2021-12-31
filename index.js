@@ -123,6 +123,31 @@ controller.connect()
 
 ///////////////////////////////////////////////
 
+document.onkeydown = checkKey;
+
+function checkKey(e) {
+    e = e || window.event;
+    const speed = 200
+    if (e.keyCode == '38') {
+        // up arrow
+        globe.rotateUp(speed)
+    }
+    else if (e.keyCode == '40') {
+        // down arrow
+        globe.rotateDown(speed)
+    }
+    else if (e.keyCode == '37') {
+       // left arrow
+       globe.rotateLeft(speed)
+    }
+    else if (e.keyCode == '39') {
+       // right arrow
+       globe.rotateRight(speed)
+    }
+}
+
+///////////////////////////////////////////////
+
 var globe
 var globeCount = 0
 

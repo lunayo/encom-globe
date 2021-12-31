@@ -26,9 +26,10 @@ var Pin = function (lat, lon, text, altitude, scene, smokeProvider, _opts) {
     showLabel: text.length > 0,
     showTop: text.length > 0,
     showSmoke: text.length > 0,
+    showVideo: text.length > 0,
   }
 
-  var lineMaterial, labelCanvas, labelTexture, labelMaterial, topTexture, topMaterial, point, line
+  var lineMaterial, labelCanvas, labelTexture, labelMaterial, topTexture, topMaterial, videoMaterial, point, line
 
   this.lat = lat
   this.lon = lon
@@ -51,6 +52,7 @@ var Pin = function (lat, lon, text, altitude, scene, smokeProvider, _opts) {
   this.topVisible = opts.showTop
   this.smokeVisible = opts.showSmoke
   this.labelVisible = opts.showLabel
+  this.videoVisible = opts.showVideo
 
   /* the line */
 
@@ -102,6 +104,27 @@ var Pin = function (lat, lon, text, altitude, scene, smokeProvider, _opts) {
   this.topSprite.scale.set(20, 20)
   this.topSprite.position.set(point.x * altitude, point.y * altitude, point.z * altitude)
 
+  /* the video */
+  videoWidth = 120
+  videoHeight = 90
+  this.videoCanvas = utils.createVideo("resources/orangutan.mp4", videoWidth, videoHeight)
+  this.videoTexture = new THREE.Texture(this.videoCanvas)
+  videoMaterial = new THREE.SpriteMaterial({
+    map: this.videoTexture,
+    depthTest: false,
+    fog: false,
+    opacity: 0,
+  })
+  this.videoSprite = new THREE.Sprite(videoMaterial)
+
+  // this.videoSprite.position.set(point.x * altitude, point.y * altitude, point.z * altitude)
+  this.videoSprite.position = {
+    x: point.x * altitude * 1.1,
+    y: point.y * altitude + (point.y < 0 ? -15 : 30),
+    z: point.z * altitude * 1.1,
+  }
+  this.videoSprite.scale.set(videoWidth, videoHeight)
+
   /* the smoke */
   if (this.smokeVisible) {
     this.smokeId = smokeProvider.setFire(lat, lon, altitude)
@@ -111,7 +134,7 @@ var Pin = function (lat, lon, text, altitude, scene, smokeProvider, _opts) {
 
   /* intro animations */
 
-  if (opts.showTop || opts.showLabel) {
+  if (opts.showTop || opts.showLabel || opts.showVideo) {
     new TWEEN.Tween({ opacity: 0 })
       .to({ opacity: 1 }, 500)
       .onUpdate(function () {
@@ -124,6 +147,11 @@ var Pin = function (lat, lon, text, altitude, scene, smokeProvider, _opts) {
           labelMaterial.opacity = this.opacity
         } else {
           labelMaterial.opacity = 0
+        }
+        if (_this.videoVisible) {
+          videoMaterial.opacity = this.opacity
+        } else {
+          videoMaterial.opacity = 0
         }
       })
       .delay(1000)
@@ -146,6 +174,21 @@ var Pin = function (lat, lon, text, altitude, scene, smokeProvider, _opts) {
   this.scene.add(this.labelSprite)
   this.scene.add(this.line)
   this.scene.add(this.topSprite)
+  this.scene.add(this.videoSprite)
+
+  this.scene.updateMatrixWorld(true)
+}
+
+Pin.prototype.distanceToCamera = function(cameraPosition) {
+  this.line.geometry.computeBoundingSphere()
+  const distance = cameraPosition.distanceTo( this.line.geometry.boundingSphere.center );
+  return distance
+}
+
+Pin.prototype.tick = function () {
+  if (this.videoCanvas.readyState === this.videoCanvas.HAVE_ENOUGH_DATA ) {
+    this.videoTexture.needsUpdate = true
+  }
 }
 
 Pin.prototype.toString = function () {
@@ -165,6 +208,13 @@ Pin.prototype.changeAltitude = function (altitude) {
       }
       if (_this.topVisible) {
         _this.topSprite.position.set(
+          point.x * this.altitude,
+          point.y * this.altitude,
+          point.z * this.altitude
+        )
+      }
+      if (_this.videoVisible) {
+        _this.videoSprite.position.set(
           point.x * this.altitude,
           point.y * this.altitude,
           point.z * this.altitude
@@ -216,6 +266,42 @@ Pin.prototype.showLabel = function () {
   }
 }
 
+Pin.prototype.hideVideo = function () {
+  if (this.videoVisible) {
+    this.videoSprite.material.opacity = 0.0
+    this.videoVisible = false
+  }
+}
+
+Pin.prototype.showVideo = function () {
+  if (!this.videoVisible) {
+    this.videoSprite.material.opacity = 1.0
+    this.videoVisible = true
+  }
+}
+
+Pin.prototype.focusVideo = function () {
+  if (this.videoVisible) {
+    const size = {width: this.videoSprite.scale.x, height: this.videoSprite.scale.y}
+    new TWEEN.Tween(size)
+      .to({ width: this.videoCanvas.width * 2, height: this.videoCanvas.height * 2})
+      .onUpdate(() => {
+        this.videoSprite.scale.set(size.width, size.height)
+      }).start()
+  }
+}
+
+Pin.prototype.defocusVideo = function () {
+  if (this.videoVisible) {
+    const size = {width: this.videoSprite.scale.x, height: this.videoSprite.scale.y}
+    new TWEEN.Tween(size)
+      .to({ width: this.videoCanvas.width, height: this.videoCanvas.height})
+      .onUpdate(() => {
+        this.videoSprite.scale.set(size.width, size.height)
+      }).start()
+  }
+}
+
 Pin.prototype.hideSmoke = function () {
   if (this.smokeVisible) {
     this.smokeProvider.extinguish(this.smokeId)
@@ -238,6 +324,7 @@ Pin.prototype.remove = function () {
   this.scene.remove(this.labelSprite)
   this.scene.remove(this.line)
   this.scene.remove(this.topSprite)
+  this.scene.remove(this.videoSprite)
 
   if (this.smokeVisible) {
     this.smokeProvider.extinguish(this.smokeId)

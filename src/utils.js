@@ -39,6 +39,17 @@ var utils = {
       : null
   },
 
+  createVideo: function(url, width, height) {
+    var video = document.createElement('video')
+    video.src = url
+    video.loop = true
+    video.muted = true
+    video.width = width
+    video.height = height
+    video.play()
+    return video
+  },
+
   createLabel: function (text, size, color, font, underlineColor) {
     var canvas = document.createElement('canvas')
     var context = canvas.getContext('2d')
