@@ -27,7 +27,7 @@ var addInitialData = function () {
     return
   }
   while (this.data.length > 0 && this.firstRunTime + (next = this.data.pop()).when < Date.now()) {
-    this.addPin(next.lat, next.lng, next.label)
+    this.addPin(next.lat, next.lng, next.label, next.videoUrl, next.description)
   }
 
   if (this.firstRunTime + next.when >= Date.now()) {
@@ -331,10 +331,11 @@ function Globe(width, height, opts) {
   this.satellites = {}
   this.quadtree = new Quadtree2(new Vec2(180, 360), 5)
   this.active = true
+  this.selectedPin = null
 
   var defaults = {
     font: 'Inconsolata',
-    baseColor: '#ffcc00',
+    baseColor: '#0b5394',
     markerColor: '#ffcc00',
     pinColor: '#00eeee',
     satelliteColor: '#ff0000',
@@ -434,7 +435,7 @@ Globe.prototype.destroy = function (callback) {
   }, 1000)
 }
 
-Globe.prototype.addPin = function (lat, lon, text) {
+Globe.prototype.addPin = function (lat, lon, text, videoUrl, description) {
   lat = parseFloat(lat)
   lon = parseFloat(lon)
 
@@ -450,7 +451,7 @@ Globe.prototype.addPin = function (lat, lon, text) {
     altitude -= 0.05 + Math.random() * 0.05
   }
 
-  var pin = new Pin(lat, lon, text, altitude, this.scene, this.smokeProvider, opts)
+  var pin = new Pin(lat, lon, text, videoUrl, description, altitude, this.scene, this.smokeProvider, opts)
 
   pin.hideSmoke()
   pin.hideLabel()
@@ -687,11 +688,17 @@ Globe.prototype.triggerPinFocus = function() {
     var distance = pin.distanceToCamera(this.camera.position)
     console.log(distance)
     if(distance > 1230 && distance < 1300) {
+      this.selectedPin = pin
       pin.focusVideo()
     } else {
       pin.defocusVideo()
     }
   }
+}
+
+Globe.prototype.showDetail = function() {
+  this.selectedPin.showDetail()
+  // this.selectedPin = null
 }
 
 Globe.prototype.rotateLeft = function (speed) {

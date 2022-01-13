@@ -144,6 +144,10 @@ function checkKey(e) {
        // right arrow
        globe.rotateRight(speed)
     }
+    else if (e.keyCode == '13') {
+      // enter key
+      globe.showDetail()
+   }
 }
 
 ///////////////////////////////////////////////

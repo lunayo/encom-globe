@@ -100,6 +100,30 @@ var utils = {
 
     return canvas
   },
+
+  createVideoLabel: function (text, size, color, font, width, height) {
+    var canvas = document.createElement('canvas')
+    var context = canvas.getContext('2d')
+    context.font = size + 'pt ' + font
+
+    canvas.width = width
+    canvas.height = height
+    
+    context.font = size + 'pt ' + font
+
+    context.textAlign = 'left'
+
+    context.miterLimit = 2
+    context.lineJoin = 'circle'
+    context.lineWidth = 6
+
+    context.lineWidth = 2
+
+    context.fillStyle = color
+    context.fillText(text, 10, 20)
+
+    return canvas
+  },
 }
 
 module.exports = utils

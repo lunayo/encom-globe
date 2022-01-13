@@ -14,7 +14,53 @@ var createTopCanvas = function (color) {
   })
 }
 
-var Pin = function (lat, lon, text, altitude, scene, smokeProvider, _opts) {
+var VideoModal = function(title = "", description = "") {
+  this.element = document.getElementById('videoModal')
+  this.videoModal = new bootstrap.Modal(this.element, {})
+
+  this.title = this.element.getElementsByClassName('modal-title')[0]
+  this.title.innerHTML = title
+
+  this.body = this.element.getElementsByClassName('modal-body')[0]
+  this.description = this.body.getElementsByClassName('description')[0]
+  this.description.innerHTML = description
+
+  this.video = this.body.getElementsByTagName('video')[0]
+  this.source = this.video.getElementsByTagName('source')[0]
+
+  this.visible = false
+
+  VideoModal.prototype.hide = function() {
+    if(this.visible) {
+      this.videoModal.hide()
+      this.video.pause()
+      this.visible = false
+    }
+  }
+
+  VideoModal.prototype.show = function() {
+    if(!this.visible) {
+      this.videoModal.show()
+      this.video.load()
+      this.video.play()
+      this.visible = true
+    }
+  }
+
+  VideoModal.prototype.setTitle = function(title) {
+    this.title.innerHTML = title
+  }
+
+  VideoModal.prototype.setBody = function(description) {
+    this.description.innerHTML = description
+  }
+
+  VideoModal.prototype.setVideoUrl = function(url) {
+    this.source.setAttribute('src', url)
+  }
+}
+
+var Pin = function (lat, lon, text, videoUrl, description, altitude, scene, smokeProvider, _opts) {
   /* options that can be passed in */
   var opts = {
     lineColor: '#8FD8D8',
@@ -34,10 +80,13 @@ var Pin = function (lat, lon, text, altitude, scene, smokeProvider, _opts) {
   this.lat = lat
   this.lon = lon
   this.text = text
+  this.description = description
   this.altitude = altitude
   this.scene = scene
   this.smokeProvider = smokeProvider
   this.dateCreated = Date.now()
+  this.videoModal = new VideoModal(text, description)
+  this.videoUrl = videoUrl
 
   if (_opts) {
     for (var i in opts) {
@@ -107,23 +156,18 @@ var Pin = function (lat, lon, text, altitude, scene, smokeProvider, _opts) {
   /* the video */
   videoWidth = 120
   videoHeight = 90
-  this.videoCanvas = utils.createVideo("resources/orangutan.mp4", videoWidth, videoHeight)
+  this.videoCanvas = utils.createVideo(videoUrl, videoWidth, videoHeight)
   this.videoTexture = new THREE.Texture(this.videoCanvas)
-  videoMaterial = new THREE.SpriteMaterial({
-    map: this.videoTexture,
-    depthTest: false,
-    fog: false,
-    opacity: 0,
-  })
-  this.videoSprite = new THREE.Sprite(videoMaterial)
 
-  // this.videoSprite.position.set(point.x * altitude, point.y * altitude, point.z * altitude)
+  var geometry = new THREE.SphereGeometry( 25, 25, 25 )
+  videoMaterial = new THREE.MeshBasicMaterial({ map: this.videoTexture })
+  this.videoSprite = new THREE.Mesh(geometry, videoMaterial)
+
   this.videoSprite.position = {
-    x: point.x * altitude * 1.1,
-    y: point.y * altitude + (point.y < 0 ? -15 : 30),
-    z: point.z * altitude * 1.1,
+    x: point.x * altitude,
+    y: point.y * altitude,
+    z: point.z * altitude,
   }
-  this.videoSprite.scale.set(videoWidth, videoHeight)
 
   /* the smoke */
   if (this.smokeVisible) {
@@ -214,11 +258,11 @@ Pin.prototype.changeAltitude = function (altitude) {
         )
       }
       if (_this.videoVisible) {
-        _this.videoSprite.position.set(
-          point.x * this.altitude,
-          point.y * this.altitude,
-          point.z * this.altitude
-        )
+        // _this.videoSprite.position.set(
+        //   point.x * this.altitude,
+        //   point.y * this.altitude,
+        //   point.z * this.altitude
+        // )
       }
       if (_this.labelVisible) {
         _this.labelSprite.position = {
@@ -282,23 +326,34 @@ Pin.prototype.showVideo = function () {
 
 Pin.prototype.focusVideo = function () {
   if (this.videoVisible) {
-    const size = {width: this.videoSprite.scale.x, height: this.videoSprite.scale.y}
+    const size = {x: this.videoSprite.scale.x, y: this.videoSprite.scale.y, z: this.videoSprite.scale.z}
     new TWEEN.Tween(size)
-      .to({ width: this.videoCanvas.width * 2, height: this.videoCanvas.height * 2})
+      .to({ x: 3, y: 3, z: 3})
       .onUpdate(() => {
-        this.videoSprite.scale.set(size.width, size.height)
+        this.videoSprite.scale.set(size.x, size.y, size.z)
       }).start()
   }
+  this.videoModal.hide()
 }
 
 Pin.prototype.defocusVideo = function () {
   if (this.videoVisible) {
-    const size = {width: this.videoSprite.scale.x, height: this.videoSprite.scale.y}
+    const size = {x: this.videoSprite.scale.x, y: this.videoSprite.scale.y, z: this.videoSprite.scale.z}
     new TWEEN.Tween(size)
-      .to({ width: this.videoCanvas.width, height: this.videoCanvas.height})
+      .to({ x: 1, y: 1, z: 1})
       .onUpdate(() => {
-        this.videoSprite.scale.set(size.width, size.height)
+        this.videoSprite.scale.set(size.x, size.y, size.z)
       }).start()
+  }
+  this.videoModal.hide()
+}
+
+Pin.prototype.showDetail = function () {
+  if (this.videoVisible) {
+      this.videoModal.setVideoUrl(this.videoUrl)
+      this.videoModal.setTitle(this.text)
+      this.videoModal.setBody(this.description)
+      this.videoModal.show()
   }
 }
 
